@@ -367,10 +367,14 @@ func ansiStrip(s string) string {
 }
 
 func TestCursorNavigation(t *testing.T) {
+	type wantS struct {
+		cursor [2]int
+		mode   Mode
+	}
 	tests := map[string]struct {
 		rows   []Row
 		action func(*Model)
-		want   [2]int
+		want   wantS
 	}{
 		"New": {
 			rows: []Row{
@@ -379,7 +383,7 @@ func TestCursorNavigation(t *testing.T) {
 				{"r3"},
 			},
 			action: func(_ *Model) {},
-			want:   [2]int{0, 0},
+			want:   wantS{cursor: [2]int{0, 0}, mode: ModeNormal},
 		},
 		"MoveDown": {
 			rows: []Row{
@@ -391,7 +395,7 @@ func TestCursorNavigation(t *testing.T) {
 			action: func(t *Model) {
 				t.MoveDown(2)
 			},
-			want: [2]int{2, 0},
+			want: wantS{cursor: [2]int{2, 0}, mode: ModeNormal},
 		},
 		"MoveUp": {
 			rows: []Row{
@@ -404,7 +408,7 @@ func TestCursorNavigation(t *testing.T) {
 				t.cursor[0] = 3
 				t.MoveUp(2)
 			},
-			want: [2]int{1, 0},
+			want: wantS{cursor: [2]int{1, 0}, mode: ModeNormal},
 		},
 		"MoveRight": {
 			rows: []Row{
@@ -413,7 +417,7 @@ func TestCursorNavigation(t *testing.T) {
 			action: func(t *Model) {
 				t.MoveRight(2)
 			},
-			want: [2]int{0, 2},
+			want: wantS{cursor: [2]int{0, 2}, mode: ModeCell},
 		},
 		"MoveLeft": {
 			rows: []Row{
@@ -423,7 +427,7 @@ func TestCursorNavigation(t *testing.T) {
 				t.cursor[1] = 2
 				t.MoveLeft(1)
 			},
-			want: [2]int{0, 1},
+			want: wantS{cursor: [2]int{0, 1}, mode: ModeCell},
 		},
 		"GotoBottom": {
 			rows: []Row{
@@ -435,7 +439,7 @@ func TestCursorNavigation(t *testing.T) {
 			action: func(t *Model) {
 				t.GotoBottom()
 			},
-			want: [2]int{3, 0},
+			want: wantS{cursor: [2]int{3, 0}, mode: ModeNormal},
 		},
 		"GotoTop": {
 			rows: []Row{
@@ -448,7 +452,7 @@ func TestCursorNavigation(t *testing.T) {
 				t.cursor[0] = 3
 				t.GotoTop()
 			},
-			want: [2]int{0, 0},
+			want: wantS{cursor: [2]int{0, 0}, mode: ModeNormal},
 		},
 		"SetCursor Row": {
 			rows: []Row{
@@ -460,7 +464,7 @@ func TestCursorNavigation(t *testing.T) {
 			action: func(t *Model) {
 				t.SetCursor(2, -1)
 			},
-			want: [2]int{2, 0},
+			want: wantS{cursor: [2]int{2, 0}, mode: ModeNormal},
 		},
 		"SetCursor Row Col": {
 			rows: []Row{
@@ -472,7 +476,7 @@ func TestCursorNavigation(t *testing.T) {
 			action: func(t *Model) {
 				t.SetCursor(2, 1)
 			},
-			want: [2]int{2, 1},
+			want: wantS{cursor: [2]int{2, 1}, mode: ModeNormal},
 		},
 		"MoveDown with overflow": {
 			rows: []Row{
@@ -484,7 +488,7 @@ func TestCursorNavigation(t *testing.T) {
 			action: func(t *Model) {
 				t.MoveDown(5)
 			},
-			want: [2]int{3, 0},
+			want: wantS{cursor: [2]int{3, 0}, mode: ModeNormal},
 		},
 		"MoveUp with overflow": {
 			rows: []Row{
@@ -497,7 +501,7 @@ func TestCursorNavigation(t *testing.T) {
 				t.cursor[0] = 3
 				t.MoveUp(5)
 			},
-			want: [2]int{0, 0},
+			want: wantS{cursor: [2]int{0, 0}, mode: ModeNormal},
 		},
 		"Blur does not stop movement": {
 			rows: []Row{
@@ -510,7 +514,27 @@ func TestCursorNavigation(t *testing.T) {
 				t.Blur()
 				t.MoveDown(2)
 			},
-			want: [2]int{2, 0},
+			want: wantS{cursor: [2]int{2, 0}, mode: ModeNormal},
+		},
+		"SetMode Normal": {
+			rows: []Row{
+				{"r1a", "r1b", "r1c"},
+			},
+			action: func(t *Model) {
+				t.SetCursor(0, 1)
+				t.SetMode(ModeNormal)
+			},
+			want: wantS{cursor: [2]int{0, 0}, mode: ModeNormal},
+		},
+		"SetMode Cell": {
+			rows: []Row{
+				{"r1a", "r1b", "r1c"},
+			},
+			action: func(t *Model) {
+				t.SetCursor(0, 1)
+				t.SetMode(ModeCell)
+			},
+			want: wantS{cursor: [2]int{0, 1}, mode: ModeCell},
 		},
 	}
 
@@ -519,8 +543,11 @@ func TestCursorNavigation(t *testing.T) {
 			table := New(WithColumns(testCols), WithRows(tc.rows))
 			tc.action(&table)
 
-			if table.Cursor() != tc.want {
-				t.Errorf("want %d, got %d", tc.want, table.Cursor())
+			if table.Cursor() != tc.want.cursor {
+				t.Errorf("want %d, got %d", tc.want.cursor, table.Cursor())
+			}
+			if table.Mode() != tc.want.mode {
+				t.Errorf("want %d, got %d", tc.want.mode, table.Mode())
 			}
 		})
 	}

@@ -19,6 +19,7 @@ type Model struct {
 
 	cols      []Column
 	rows      []Row
+	mode      Mode
 	cursor    [2]int // [row, col]
 	focus     bool
 	styles    Styles
@@ -28,6 +29,17 @@ type Model struct {
 	start    int
 	end      int
 }
+
+// Mode represents different states the table could be in. This can affect
+// rendering and other behavior.
+type Mode int
+
+const (
+	// ModeNormal is the default row selection mode.
+	ModeNormal Mode = iota
+	// ModeCell is the cell selection mode.
+	ModeCell
+)
 
 // Row represents one line in the table.
 type Row []string
@@ -41,21 +53,22 @@ type Column struct {
 // KeyMap defines keybindings. It satisfies to the help.KeyMap interface, which
 // is used to render the help menu.
 type KeyMap struct {
-	RowUp        key.Binding
-	RowDown      key.Binding
-	ColumnLeft   key.Binding
-	ColumnRight  key.Binding
-	PageUp       key.Binding
-	PageDown     key.Binding
-	HalfPageUp   key.Binding
-	HalfPageDown key.Binding
-	GotoTop      key.Binding
-	GotoBottom   key.Binding
+	RowUp         key.Binding
+	RowDown       key.Binding
+	ColumnLeft    key.Binding
+	ColumnRight   key.Binding
+	PageUp        key.Binding
+	PageDown      key.Binding
+	HalfPageUp    key.Binding
+	HalfPageDown  key.Binding
+	GotoTop       key.Binding
+	GotoBottom    key.Binding
+	SetNormalMode key.Binding
 }
 
 // ShortHelp implements the KeyMap interface.
 func (km KeyMap) ShortHelp() []key.Binding {
-	return []key.Binding{km.RowUp, km.RowDown, km.ColumnLeft, km.ColumnRight}
+	return []key.Binding{km.RowUp, km.RowDown, km.ColumnLeft, km.ColumnRight, km.SetNormalMode}
 }
 
 // FullHelp implements the KeyMap interface.
@@ -63,7 +76,7 @@ func (km KeyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
 		{km.RowUp, km.RowDown, km.ColumnLeft, km.ColumnRight},
 		{km.PageUp, km.PageDown, km.HalfPageUp, km.HalfPageDown},
-		{km.GotoTop, km.GotoBottom},
+		{km.GotoTop, km.GotoBottom, km.SetNormalMode},
 	}
 }
 
@@ -79,6 +92,8 @@ type RenderContext struct {
 	Cell [2]int
 	// Value is the string content of the cell.
 	Value string
+	// Mode indicates the current table mode.
+	Mode Mode
 	// IsFocused indicates whether the table is currently focused.
 	IsFocused bool
 }
@@ -125,6 +140,10 @@ func DefaultKeyMap() KeyMap {
 		GotoBottom: key.NewBinding(
 			key.WithKeys("end", "G"),
 			key.WithHelp("G/end", "go to end"),
+		),
+		SetNormalMode: key.NewBinding(
+			key.WithKeys("esc"),
+			key.WithHelp("esc", "return to normal mode"),
 		),
 	}
 }
@@ -262,6 +281,8 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			m.GotoTop()
 		case key.Matches(msg, m.KeyMap.GotoBottom):
 			m.GotoBottom()
+		case key.Matches(msg, m.KeyMap.SetNormalMode):
+			m.SetMode(ModeNormal)
 		}
 	}
 
@@ -410,7 +431,7 @@ func (m *Model) SetCursor(row, col int) {
 	}
 }
 
-// MoveUp moves the selection up by any number of rows.
+// MoveUp moves the selection up by n number of rows.
 // It can not go above the first row.
 func (m *Model) MoveUp(n int) {
 	m.cursor[0] = clamp(m.cursor[0]-n, 0, len(m.rows)-1)
@@ -428,7 +449,7 @@ func (m *Model) MoveUp(n int) {
 	m.UpdateViewport()
 }
 
-// MoveDown moves the selection down by any number of rows.
+// MoveDown moves the selection down by n number of rows.
 // It can not go below the last row.
 func (m *Model) MoveDown(n int) {
 	m.cursor[0] = clamp(m.cursor[0]+n, 0, len(m.rows)-1)
@@ -447,16 +468,18 @@ func (m *Model) MoveDown(n int) {
 	m.UpdateViewport()
 }
 
-// MoveLeft moves the selection left by any number of columns.
-// It can not go past the first column.
+// MoveLeft sets the table to cell selection mode and moves the selection left
+// by n number of columns. It can not go past the first column.
 func (m *Model) MoveLeft(n int) {
+	m.mode = ModeCell
 	m.cursor[1] = clamp(m.cursor[1]-n, 0, len(m.cols)-1)
 	m.UpdateViewport()
 }
 
-// MoveRight moves the selection right by any number of columns.
-// It can not go past the last column.
+// MoveRight sets the table to cell selection mode and moves the selection right
+// by n number of columns. It can not go past the last column.
 func (m *Model) MoveRight(n int) {
+	m.mode = ModeCell
 	m.cursor[1] = clamp(m.cursor[1]+n, 0, len(m.cols)-1)
 	m.UpdateViewport()
 }
@@ -469,6 +492,20 @@ func (m *Model) GotoTop() {
 // GotoBottom moves the selection to the last row.
 func (m *Model) GotoBottom() {
 	m.MoveDown(len(m.rows))
+}
+
+// SetMode sets the table mode.
+func (m *Model) SetMode(md Mode) {
+	m.mode = md
+	if md == ModeNormal {
+		m.cursor[1] = 0 // reset col
+	}
+	m.UpdateViewport()
+}
+
+// Mode returns the current table mode.
+func (m Model) Mode() Mode {
+	return m.mode
 }
 
 // FromValues create the table rows from a simple string. It uses `\n` by
@@ -516,7 +553,7 @@ func (m *Model) renderRow(r int) string {
 			cellStyle = m.styleFunc(ctx)
 		}
 
-		if r == m.cursor[0] && c == m.cursor[1] {
+		if r == m.cursor[0] && c == m.cursor[1] && m.mode == ModeCell {
 			cellStyle = cellStyle.Inherit(m.styles.Selected)
 		}
 
@@ -527,7 +564,7 @@ func (m *Model) renderRow(r int) string {
 
 	row := lipgloss.JoinHorizontal(lipgloss.Top, s...)
 
-	if r == m.cursor[0] {
+	if r == m.cursor[0] && m.mode == ModeNormal {
 		return m.styles.Selected.Render(row)
 	}
 
@@ -537,6 +574,7 @@ func (m *Model) renderRow(r int) string {
 func (m *Model) newRenderContext() RenderContext {
 	return RenderContext{
 		Cursor:    m.cursor,
+		Mode:      m.mode,
 		IsFocused: m.focus,
 	}
 }
