@@ -277,6 +277,20 @@ func TestModel_RenderRow(t *testing.T) {
 			},
 			expected: "FoooooooooBaaaaaaaarQuuuuuuuux",
 		},
+		{
+			name: "simple row with style func",
+			table: &Model{
+				rows: []Row{{"Foooooo", "Baaaaar", "Baaaaaz"}},
+				cols: testCols,
+				styleFunc: func(row, col int, value string) lipgloss.Style {
+					if strings.HasSuffix(value, "z") {
+						return lipgloss.NewStyle().Transform(strings.ToLower)
+					}
+					return lipgloss.NewStyle().Transform(strings.ToUpper)
+				},
+			},
+			expected: "FOOOOOO   BAAAAAR   baaaaaz   ",
+		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
