@@ -354,6 +354,25 @@ func TestCursorNavigation(t *testing.T) {
 			},
 			want: [2]int{1, 0},
 		},
+		"MoveRight": {
+			rows: []Row{
+				{"r1a", "r1b", "r1c"},
+			},
+			action: func(t *Model) {
+				t.MoveRight(2)
+			},
+			want: [2]int{0, 2},
+		},
+		"MoveLeft": {
+			rows: []Row{
+				{"r1a", "r1b", "r1c"},
+			},
+			action: func(t *Model) {
+				t.cursor[1] = 2
+				t.MoveLeft(1)
+			},
+			want: [2]int{0, 1},
+		},
 		"GotoBottom": {
 			rows: []Row{
 				{"r1"},
