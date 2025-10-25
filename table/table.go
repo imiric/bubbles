@@ -41,8 +41,10 @@ type Column struct {
 // KeyMap defines keybindings. It satisfies to the help.KeyMap interface, which
 // is used to render the help menu.
 type KeyMap struct {
-	LineUp       key.Binding
-	LineDown     key.Binding
+	RowUp        key.Binding
+	RowDown      key.Binding
+	ColumnLeft   key.Binding
+	ColumnRight  key.Binding
 	PageUp       key.Binding
 	PageDown     key.Binding
 	HalfPageUp   key.Binding
@@ -53,14 +55,15 @@ type KeyMap struct {
 
 // ShortHelp implements the KeyMap interface.
 func (km KeyMap) ShortHelp() []key.Binding {
-	return []key.Binding{km.LineUp, km.LineDown}
+	return []key.Binding{km.RowUp, km.RowDown, km.ColumnLeft, km.ColumnRight}
 }
 
 // FullHelp implements the KeyMap interface.
 func (km KeyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
-		{km.LineUp, km.LineDown, km.GotoTop, km.GotoBottom},
+		{km.RowUp, km.RowDown, km.ColumnLeft, km.ColumnRight},
 		{km.PageUp, km.PageDown, km.HalfPageUp, km.HalfPageDown},
+		{km.GotoTop, km.GotoBottom},
 	}
 }
 
@@ -71,13 +74,21 @@ type StyleFunc func(row, col int, value string) lipgloss.Style
 // DefaultKeyMap returns a default set of keybindings.
 func DefaultKeyMap() KeyMap {
 	return KeyMap{
-		LineUp: key.NewBinding(
+		RowUp: key.NewBinding(
 			key.WithKeys("up", "k"),
 			key.WithHelp("↑/k", "up"),
 		),
-		LineDown: key.NewBinding(
+		RowDown: key.NewBinding(
 			key.WithKeys("down", "j"),
 			key.WithHelp("↓/j", "down"),
+		),
+		ColumnLeft: key.NewBinding(
+			key.WithKeys("h", "left"),
+			key.WithHelp("h/←", "left"),
+		),
+		ColumnRight: key.NewBinding(
+			key.WithKeys("l", "right"),
+			key.WithHelp("l/→", "right"),
 		),
 		PageUp: key.NewBinding(
 			key.WithKeys("b", "pgup"),
@@ -219,10 +230,14 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyPressMsg:
 		switch {
-		case key.Matches(msg, m.KeyMap.LineUp):
+		case key.Matches(msg, m.KeyMap.RowUp):
 			m.MoveUp(1)
-		case key.Matches(msg, m.KeyMap.LineDown):
+		case key.Matches(msg, m.KeyMap.RowDown):
 			m.MoveDown(1)
+		case key.Matches(msg, m.KeyMap.ColumnLeft):
+			m.MoveLeft(1)
+		case key.Matches(msg, m.KeyMap.ColumnRight):
+			m.MoveRight(1)
 		case key.Matches(msg, m.KeyMap.PageUp):
 			m.MoveUp(m.viewport.Height())
 		case key.Matches(msg, m.KeyMap.PageDown):
@@ -407,6 +422,20 @@ func (m *Model) MoveDown(n int) {
 		offset = clamp(offset+1, 0, 1)
 	}
 	m.viewport.SetYOffset(offset)
+	m.UpdateViewport()
+}
+
+// MoveLeft moves the selection left by any number of columns.
+// It can not go past the first column.
+func (m *Model) MoveLeft(n int) {
+	m.cursor[1] = clamp(m.cursor[1]-n, 0, len(m.cols)-1)
+	m.UpdateViewport()
+}
+
+// MoveRight moves the selection right by any number of columns.
+// It can not go past the last column.
+func (m *Model) MoveRight(n int) {
+	m.cursor[1] = clamp(m.cursor[1]+n, 0, len(m.cols)-1)
 	m.UpdateViewport()
 }
 
