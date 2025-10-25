@@ -69,8 +69,20 @@ func (km KeyMap) FullHelp() [][]key.Binding {
 }
 
 // StyleFunc is a function that can be used to customize the style of a table
-// cell based on the row and column index.
-type StyleFunc func(row, col int, value string) lipgloss.Style
+// cell based on the current render context.
+type StyleFunc func(ctx RenderContext) lipgloss.Style
+
+// RenderContext contains the model's current state, useful for cell styling.
+type RenderContext struct {
+	// Cursor is the current [row, column] position of the table selection.
+	Cursor [2]int
+	// Cell is the [row, column] position of the cell being rendered.
+	Cell [2]int
+	// Value is the string content of the cell.
+	Value string
+	// IsFocused indicates whether the table is currently focused.
+	IsFocused bool
+}
 
 // DefaultKeyMap returns a default set of keybindings.
 func DefaultKeyMap() KeyMap {
@@ -489,15 +501,19 @@ func (m Model) headersView() string {
 }
 
 func (m *Model) renderRow(r int) string {
+	ctx := m.newRenderContext()
 	s := make([]string, 0, len(m.cols))
 	for c, value := range m.rows[r] {
 		if m.cols[c].Width <= 0 {
 			continue
 		}
 
+		ctx.Cell = [2]int{r, c}
+		ctx.Value = value
+
 		cellStyle := m.styles.Cell
 		if m.styleFunc != nil {
-			cellStyle = m.styleFunc(r, c, value)
+			cellStyle = m.styleFunc(ctx)
 		}
 
 		if r == m.cursor[0] && c == m.cursor[1] {
@@ -516,6 +532,13 @@ func (m *Model) renderRow(r int) string {
 	}
 
 	return row
+}
+
+func (m *Model) newRenderContext() RenderContext {
+	return RenderContext{
+		Cursor:    m.cursor,
+		IsFocused: m.focus,
+	}
 }
 
 func clamp(v, low, high int) int {

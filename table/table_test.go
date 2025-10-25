@@ -245,8 +245,8 @@ func TestModel_RenderRow(t *testing.T) {
 			table: &Model{
 				rows: []Row{{"Foooooo", "Baaaaar", "Baaaaaz"}},
 				cols: testCols,
-				styleFunc: func(row, col int, value string) lipgloss.Style {
-					if strings.HasSuffix(value, "z") {
+				styleFunc: func(ctx RenderContext) lipgloss.Style {
+					if strings.HasSuffix(ctx.Value, "z") {
 						return lipgloss.NewStyle().Transform(strings.ToLower)
 					}
 					return lipgloss.NewStyle().Transform(strings.ToUpper)
