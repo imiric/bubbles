@@ -26,7 +26,6 @@ func TestNew(t *testing.T) {
 		"Default": {
 			want: Model{
 				// Default fields
-				cursor: 0,
 				viewport: viewport.New(
 					viewport.WithWidth(0),
 					viewport.WithHeight(20),
@@ -45,7 +44,6 @@ func TestNew(t *testing.T) {
 			},
 			want: Model{
 				// Default fields
-				cursor: 0,
 				viewport: viewport.New(
 					viewport.WithWidth(0),
 					viewport.WithHeight(20),
@@ -74,7 +72,6 @@ func TestNew(t *testing.T) {
 			},
 			want: Model{
 				// Default fields
-				cursor: 0,
 				viewport: viewport.New(
 					viewport.WithWidth(0),
 					viewport.WithHeight(20),
@@ -100,7 +97,6 @@ func TestNew(t *testing.T) {
 			},
 			want: Model{
 				// Default fields
-				cursor: 0,
 				KeyMap: DefaultKeyMap(),
 				Help:   help.New(),
 				styles: DefaultStyles(),
@@ -119,7 +115,6 @@ func TestNew(t *testing.T) {
 			},
 			want: Model{
 				// Default fields
-				cursor: 0,
 				KeyMap: DefaultKeyMap(),
 				Help:   help.New(),
 				styles: DefaultStyles(),
@@ -138,7 +133,6 @@ func TestNew(t *testing.T) {
 			},
 			want: Model{
 				// Default fields
-				cursor: 0,
 				viewport: viewport.New(
 					viewport.WithWidth(0),
 					viewport.WithHeight(20),
@@ -157,7 +151,6 @@ func TestNew(t *testing.T) {
 			},
 			want: Model{
 				// Default fields
-				cursor: 0,
 				viewport: viewport.New(
 					viewport.WithWidth(0),
 					viewport.WithHeight(20),
@@ -175,7 +168,6 @@ func TestNew(t *testing.T) {
 			},
 			want: Model{
 				// Default fields
-				cursor: 0,
 				viewport: viewport.New(
 					viewport.WithWidth(0),
 					viewport.WithHeight(20),
@@ -378,7 +370,7 @@ func TestCursorNavigation(t *testing.T) {
 	tests := map[string]struct {
 		rows   []Row
 		action func(*Model)
-		want   int
+		want   [2]int
 	}{
 		"New": {
 			rows: []Row{
@@ -387,7 +379,7 @@ func TestCursorNavigation(t *testing.T) {
 				{"r3"},
 			},
 			action: func(_ *Model) {},
-			want:   0,
+			want:   [2]int{0, 0},
 		},
 		"MoveDown": {
 			rows: []Row{
@@ -399,7 +391,7 @@ func TestCursorNavigation(t *testing.T) {
 			action: func(t *Model) {
 				t.MoveDown(2)
 			},
-			want: 2,
+			want: [2]int{2, 0},
 		},
 		"MoveUp": {
 			rows: []Row{
@@ -409,10 +401,10 @@ func TestCursorNavigation(t *testing.T) {
 				{"r4"},
 			},
 			action: func(t *Model) {
-				t.cursor = 3
+				t.cursor[0] = 3
 				t.MoveUp(2)
 			},
-			want: 1,
+			want: [2]int{1, 0},
 		},
 		"GotoBottom": {
 			rows: []Row{
@@ -424,7 +416,7 @@ func TestCursorNavigation(t *testing.T) {
 			action: func(t *Model) {
 				t.GotoBottom()
 			},
-			want: 3,
+			want: [2]int{3, 0},
 		},
 		"GotoTop": {
 			rows: []Row{
@@ -434,12 +426,12 @@ func TestCursorNavigation(t *testing.T) {
 				{"r4"},
 			},
 			action: func(t *Model) {
-				t.cursor = 3
+				t.cursor[0] = 3
 				t.GotoTop()
 			},
-			want: 0,
+			want: [2]int{0, 0},
 		},
-		"SetCursor": {
+		"SetCursor Row": {
 			rows: []Row{
 				{"r1"},
 				{"r2"},
@@ -447,9 +439,21 @@ func TestCursorNavigation(t *testing.T) {
 				{"r4"},
 			},
 			action: func(t *Model) {
-				t.SetCursor(2)
+				t.SetCursor(2, -1)
 			},
-			want: 2,
+			want: [2]int{2, 0},
+		},
+		"SetCursor Row Col": {
+			rows: []Row{
+				{"r1a", "r1b"},
+				{"r2a", "r2b"},
+				{"r3a", "r3b"},
+				{"r4a", "r4b"},
+			},
+			action: func(t *Model) {
+				t.SetCursor(2, 1)
+			},
+			want: [2]int{2, 1},
 		},
 		"MoveDown with overflow": {
 			rows: []Row{
@@ -461,7 +465,7 @@ func TestCursorNavigation(t *testing.T) {
 			action: func(t *Model) {
 				t.MoveDown(5)
 			},
-			want: 3,
+			want: [2]int{3, 0},
 		},
 		"MoveUp with overflow": {
 			rows: []Row{
@@ -471,10 +475,10 @@ func TestCursorNavigation(t *testing.T) {
 				{"r4"},
 			},
 			action: func(t *Model) {
-				t.cursor = 3
+				t.cursor[0] = 3
 				t.MoveUp(5)
 			},
-			want: 0,
+			want: [2]int{0, 0},
 		},
 		"Blur does not stop movement": {
 			rows: []Row{
@@ -487,7 +491,7 @@ func TestCursorNavigation(t *testing.T) {
 				t.Blur()
 				t.MoveDown(2)
 			},
-			want: 2,
+			want: [2]int{2, 0},
 		},
 	}
 
