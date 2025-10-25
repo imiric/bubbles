@@ -321,6 +321,16 @@ func (m Model) SelectedRow() Row {
 	return m.rows[m.cursor[0]]
 }
 
+// SelectedCell returns the selected cell value.
+func (m Model) SelectedCell() string {
+	if m.cursor[0] < 0 || m.cursor[0] >= len(m.rows) ||
+		m.cursor[1] < 0 || m.cursor[1] >= len(m.cols) {
+		return ""
+	}
+
+	return m.rows[m.cursor[0]][m.cursor[1]]
+}
+
 // Rows returns the current rows.
 func (m Model) Rows() []Row {
 	return m.rows

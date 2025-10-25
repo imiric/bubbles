@@ -474,6 +474,16 @@ func TestCursorNavigation(t *testing.T) {
 	}
 }
 
+func TestModel_SelectedCell(t *testing.T) {
+	table := New(WithColumns(testCols), WithRows([]Row{{"a1", "a2", "a3"}, {"b1", "b2", "b3"}}))
+	table.SetCursor(1, 1)
+	got := table.SelectedCell()
+	want := "b2"
+	if got != want {
+		t.Errorf("want %s, got %s", want, got)
+	}
+}
+
 func TestModel_SetRows(t *testing.T) {
 	table := New(WithColumns(testCols))
 
