@@ -23,7 +23,7 @@ type Model struct {
 	rows      []Row
 	mode      Mode
 	cursor    [2]int // [row, col]
-	focus     bool
+	focused   bool
 	styles    Styles
 	styleFunc StyleFunc
 
@@ -229,7 +229,7 @@ func WithWidth(w int) Option {
 // WithFocused sets the focus state of the table.
 func WithFocused(f bool) Option {
 	return func(m *Model) {
-		m.focus = f
+		m.focused = f
 	}
 }
 
@@ -257,7 +257,7 @@ func WithKeyMap(km KeyMap) Option {
 
 // Update is the Bubble Tea update loop.
 func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
-	if !m.focus {
+	if !m.focused {
 		return m, nil
 	}
 
@@ -294,19 +294,19 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 
 // Focused returns the focus state of the table.
 func (m Model) Focused() bool {
-	return m.focus
+	return m.focused
 }
 
 // Focus focuses the table, allowing the user to move around the rows and
 // interact.
 func (m *Model) Focus() {
-	m.focus = true
+	m.focused = true
 	m.UpdateViewport()
 }
 
 // Blur blurs the table, preventing selection or movement.
 func (m *Model) Blur() {
-	m.focus = false
+	m.focused = false
 	m.UpdateViewport()
 }
 
@@ -586,7 +586,7 @@ func (m *Model) newRenderContext() RenderContext {
 	return RenderContext{
 		Cursor:    m.cursor,
 		Mode:      m.mode,
-		IsFocused: m.focus,
+		IsFocused: m.focused,
 	}
 }
 
