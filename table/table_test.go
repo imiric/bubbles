@@ -563,6 +563,66 @@ func TestModel_SelectedCell(t *testing.T) {
 	}
 }
 
+func TestModel_SetRow(t *testing.T) {
+	tests := []struct {
+		name     string
+		row      Row
+		idx      int
+		wantRows []Row
+		wantErr  string
+	}{
+		{
+			name:     "ok",
+			row:      Row{"r1-new"},
+			idx:      0,
+			wantRows: []Row{{"r1-new"}, {"r2"}},
+		},
+		{
+			name:     "err/index_negative",
+			row:      Row{"r1-new"},
+			idx:      -1,
+			wantRows: []Row{{"r1"}, {"r2"}},
+			wantErr:  "index -1 is out of bounds",
+		},
+		{
+			name:     "err/index_out_of_bounds",
+			row:      Row{"r1-new"},
+			idx:      2,
+			wantRows: []Row{{"r1"}, {"r2"}},
+			wantErr:  "index 2 is out of bounds",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			table := New(WithColumns(testCols), WithRows([]Row{{"r1"}, {"r2"}}))
+
+			if len(table.rows) != 2 {
+				t.Fatalf("want 2, got %d", len(table.rows))
+			}
+
+			gotErr := table.SetRow(tt.idx, tt.row)
+			if tt.wantErr != "" {
+				if gotErr == nil || gotErr.Error() != tt.wantErr {
+					t.Fatalf("want error %q, got %q", tt.wantErr, gotErr)
+				}
+			} else {
+				if gotErr != nil {
+					t.Fatalf("got unexpected error %q", gotErr)
+				}
+			}
+
+			if len(table.rows) != 2 {
+				t.Fatalf("want 2, got %d", len(table.rows))
+			}
+
+			if !reflect.DeepEqual(table.rows, tt.wantRows) {
+				t.Fatalf("\n\nwant %v\n\ngot %v", tt.wantRows, table.rows)
+			}
+		})
+	}
+}
+
 func TestModel_SetRows(t *testing.T) {
 	table := New(WithColumns(testCols))
 

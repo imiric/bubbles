@@ -2,6 +2,7 @@
 package table
 
 import (
+	"fmt"
 	"strings"
 
 	"charm.land/bubbles/v2/help"
@@ -370,6 +371,16 @@ func (m Model) Rows() []Row {
 // Columns returns the current columns.
 func (m Model) Columns() []Column {
 	return m.cols
+}
+
+// SetRow sets a single row at index i.
+func (m *Model) SetRow(i int, r Row) error {
+	if i < 0 || i > len(m.rows)-1 {
+		return fmt.Errorf("index %d is out of bounds", i)
+	}
+	m.rows[i] = r
+	m.UpdateViewport()
+	return nil
 }
 
 // SetRows sets a new rows state.
