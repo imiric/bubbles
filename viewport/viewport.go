@@ -86,6 +86,14 @@ type Model struct {
 	// useful for setting borders, margins and padding.
 	Style lipgloss.Style
 
+	// MaxLines caps the internal line buffer to prevent unbounded memory use
+	// in streaming scenarios. Older lines are discarded when exceeded.
+	MaxLines int
+
+	// AutoScroll enables automatic following of new lines appended to the end.
+	// Disabled on manual scroll; re-enabled only if manually scrolled back to bottom.
+	AutoScroll bool
+
 	// LeftGutterFunc allows to define a [GutterFunc] that adds a column into
 	// the left of the viewport, which is kept when horizontal scrolling.
 	// This can be used for things like line numbers, selection indicators,
@@ -150,8 +158,10 @@ func (m *Model) setInitialValues() {
 	m.KeyMap = DefaultKeyMap()
 	m.MouseWheelEnabled = true
 	m.MouseWheelDelta = 3
-	m.horizontalStep = defaultHorizontalStep
+	m.MaxLines = 1000
+	m.AutoScroll = true
 	m.LeftGutterFunc = NoGutter
+	m.horizontalStep = defaultHorizontalStep
 	m.initialized = true
 }
 
@@ -224,6 +234,8 @@ func (m Model) HorizontalScrollPercent() float64 {
 }
 
 // SetContent set the pager's text content. Line endings will be normalized to '\n'.
+// Primarily for initial setup; use AppendLines for streaming additions to avoid
+// rebuilding all content.
 func (m *Model) SetContent(s string) {
 	m.SetContentLines(strings.Split(s, "\n"))
 }
@@ -312,6 +324,29 @@ func (m *Model) Focus() {
 // Blur blurs the viewport, disabling user interaction.
 func (m *Model) Blur() {
 	m.focused = false
+}
+
+// AppendLines efficiently appends one or more new lines to the viewport's
+// content, implementing a ring buffer to maintain the MaxLines cap. If
+// AutoScroll is enabled, the view follows to the new bottom; otherwise,
+// new lines accumulate off-screen.
+func (m *Model) AppendLines(newLines []string) {
+	m.lines = append(m.lines, newLines...)
+	m.longestLineWidth = max(m.longestLineWidth, maxLineWidth(newLines))
+
+	// Enforce ring buffer: discard oldest lines if over MaxLines
+	if len(m.lines) > m.MaxLines {
+		m.lines = m.lines[len(m.lines)-m.MaxLines:]
+		// Adjust YOffset if ring buffer shifted content
+		if m.YOffset() > len(m.lines)-m.Height() {
+			m.SetYOffset(max(0, len(m.lines)-m.Height()))
+		}
+	}
+
+	// Auto-scroll if enabled
+	if m.AutoScroll {
+		m.SetYOffset(m.maxYOffset())
+	}
 }
 
 // maxYOffset returns the maximum possible value of the y-offset based on the
@@ -740,6 +775,8 @@ func (m Model) updateAsModel(msg tea.Msg) Model {
 			m.ScrollRight(m.horizontalStep)
 		}
 	}
+
+	m.AutoScroll = m.AtBottom()
 
 	return m
 }
