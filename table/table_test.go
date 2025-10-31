@@ -142,7 +142,7 @@ func TestNew(t *testing.T) {
 				styles: DefaultStyles(),
 
 				// Modified fields
-				focus: true,
+				focused: true,
 			},
 		},
 		"WithStyles": {
