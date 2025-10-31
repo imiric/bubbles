@@ -63,6 +63,7 @@ type Model struct {
 	HighPerformanceRendering bool
 
 	initialized      bool
+	focused          bool
 	lines            []string
 	longestLineWidth int
 }
@@ -130,6 +131,21 @@ func (m *Model) SetContent(s string) {
 	if m.YOffset > len(m.lines)-1 {
 		m.GotoBottom()
 	}
+}
+
+// Focused returns the focus state of the viewport.
+func (m Model) Focused() bool {
+	return m.focused
+}
+
+// Focus focuses the viewport, enabling user interaction.
+func (m *Model) Focus() {
+	m.focused = true
+}
+
+// Blur blurs the viewport, disabling user interaction.
+func (m *Model) Blur() {
+	m.focused = false
 }
 
 // maxYOffset returns the maximum possible value of the y-offset based on the
@@ -400,6 +416,10 @@ func ViewUp(m Model, lines []string) tea.Cmd {
 
 // Update handles standard message-based viewport updates.
 func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
+	if !m.focused {
+		return m, nil
+	}
+
 	var cmd tea.Cmd
 	m, cmd = m.updateAsModel(msg)
 	return m, cmd
