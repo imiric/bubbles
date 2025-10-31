@@ -95,6 +95,7 @@ type Model struct {
 	LeftGutterFunc GutterFunc
 
 	initialized      bool
+	focused          bool
 	lines            []string
 	longestLineWidth int
 
@@ -296,6 +297,21 @@ func (m Model) calculateLine(yoffset int) (total, ridx, voffset int) {
 	}
 
 	return total, ridx, voffset
+}
+
+// Focused returns the focus state of the viewport.
+func (m Model) Focused() bool {
+	return m.focused
+}
+
+// Focus focuses the viewport, enabling user interaction.
+func (m *Model) Focus() {
+	m.focused = true
+}
+
+// Blur blurs the viewport, disabling user interaction.
+func (m *Model) Blur() {
+	m.focused = false
 }
 
 // maxYOffset returns the maximum possible value of the y-offset based on the
@@ -654,6 +670,10 @@ func (m Model) findNearestMatch() int {
 
 // Update handles standard message-based viewport updates.
 func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
+	if !m.focused {
+		return m, nil
+	}
+
 	m = m.updateAsModel(msg)
 	return m, nil
 }
