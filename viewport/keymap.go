@@ -56,3 +56,19 @@ func DefaultKeyMap() KeyMap {
 		),
 	}
 }
+
+// ShortHelp implements help.KeyMap.
+func (km KeyMap) ShortHelp() []key.Binding {
+	return []key.Binding{
+		km.Up, km.Down, km.Left, km.Right,
+		km.PageUp, km.PageDown, km.HalfPageUp, km.HalfPageDown,
+	}
+}
+
+// FullHelp implements help.KeyMap, similar to ShortHelp but in groups.
+func (km KeyMap) FullHelp() [][]key.Binding {
+	return [][]key.Binding{
+		{km.Up, km.Down, km.Left, km.Right},
+		{km.PageUp, km.PageDown, km.HalfPageUp, km.HalfPageDown},
+	}
+}
