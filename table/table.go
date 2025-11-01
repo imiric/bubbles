@@ -2,6 +2,7 @@
 package table
 
 import (
+	"cmp"
 	"fmt"
 	"strings"
 
@@ -26,6 +27,7 @@ type Model struct {
 	focused   bool
 	styles    Styles
 	styleFunc StyleFunc
+	propWidth float64
 
 	viewport viewport.Model
 	start    int
@@ -48,8 +50,9 @@ type Row []string
 
 // Column defines the table structure.
 type Column struct {
-	Title string
-	Width int
+	Title    string
+	Width    int // fixed width
+	MinWidth int // dynamic width that must not be below this value
 }
 
 // KeyMap defines keybindings. It satisfies to the help.KeyMap interface, which
@@ -226,6 +229,15 @@ func WithWidth(w int) Option {
 	}
 }
 
+// WithProportionalWidth sets the width of the table as a proportion of the
+// window width. This is used for dynamic table width calculations. p should be
+// between 0 and 1.
+func WithProportionalWidth(p float64) Option {
+	return func(m *Model) {
+		m.propWidth = clamp(p, 0, 1)
+	}
+}
+
 // WithFocused sets the focus state of the table.
 func WithFocused(f bool) Option {
 	return func(m *Model) {
@@ -257,8 +269,16 @@ func WithKeyMap(km KeyMap) Option {
 
 // Update is the Bubble Tea update loop.
 func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
-	if !m.focused {
-		return m, nil
+	// Process some messages regardless of focus.
+	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		if m.adjustColumnWidths(msg.Width) {
+			m.UpdateViewport()
+		}
+	default:
+		if !m.focused {
+			return m, nil
+		}
 	}
 
 	switch msg := msg.(type) {
@@ -582,6 +602,112 @@ func (m *Model) renderRow(r int) string {
 	return row
 }
 
+// Adjust column widths dynamically depending on the configured table
+// proportional width and the current window width. Only columns with MinWidth >
+// 0 will be considered.
+func (m *Model) adjustColumnWidths(windowWidth int) (changed bool) {
+	if m.propWidth <= 0 {
+		return false
+	}
+
+	dynamicIndices := []int{}
+	for i, col := range m.cols {
+		if col.MinWidth > 0 {
+			dynamicIndices = append(dynamicIndices, i)
+		}
+	}
+	if len(dynamicIndices) == 0 {
+		return false
+	}
+
+	// Step 1: Set initial widths for dynamic columns based on content/MinWidth
+	for _, idx := range dynamicIndices {
+		col := &m.cols[idx]
+		contentWidth := runewidth.StringWidth(col.Title)
+		for _, row := range m.rows {
+			if idx < len(row) {
+				contentWidth = max(contentWidth, runewidth.StringWidth(row[idx]))
+			}
+		}
+		newWidth := max(col.MinWidth, contentWidth)
+		if col.Width != newWidth {
+			col.Width = newWidth
+			changed = true
+		}
+	}
+
+	// Step 2: Compute total table width
+	totalWidth := 0
+	for _, col := range m.cols {
+		totalWidth += col.Width
+	}
+
+	// Step 3: Compute target width including styles
+	cellStyleWidth := m.styles.Cell.GetHorizontalFrameSize()
+	vpStyleWidth := m.viewport.Style.GetHorizontalFrameSize()
+	// The -2 is needed for correct adjustments, but I'm not sure where the extra
+	// width comes from.
+	targetWidth := int(m.propWidth*float64(windowWidth)) -
+		(len(m.cols) * cellStyleWidth) - vpStyleWidth - 2
+
+	// Step 4: Compute delta
+	delta := targetWidth - totalWidth
+	if delta == 0 {
+		return changed
+	}
+
+	// Step 5: Adjust widths
+	if delta > 0 {
+		// Expand: distribute delta equally among dynamic columns
+		extra := delta / len(dynamicIndices)
+		remainder := delta % len(dynamicIndices)
+		for i, idx := range dynamicIndices {
+			add := extra
+			if i < remainder {
+				add += 1 // Distribute remainder evenly
+			}
+			m.cols[idx].Width += add
+			changed = true
+		}
+	} else {
+		// Shrink: compute total shrinkable width
+		shrinkable := 0
+		shrinkableWidths := make([]int, len(dynamicIndices))
+		for i, idx := range dynamicIndices {
+			shrinkableWidths[i] = m.cols[idx].Width - m.cols[idx].MinWidth
+			shrinkable += shrinkableWidths[i]
+		}
+
+		toShrink := -delta
+		if shrinkable >= toShrink {
+			// Distribute proportionally to shrinkable amounts
+			for i, idx := range dynamicIndices {
+				if shrinkableWidths[i] > 0 {
+					shrink := (shrinkableWidths[i] * toShrink) / shrinkable
+					m.cols[idx].Width -= shrink
+					changed = true
+				}
+			}
+		} else {
+			// Not enough shrinkable: set all to MinWidth (allowing rendering glitches)
+			for _, idx := range dynamicIndices {
+				m.cols[idx].Width = m.cols[idx].MinWidth
+				changed = true
+			}
+		}
+	}
+
+	// Ensure no dynamic column below MinWidth (shouldn't happen, but to be safe)
+	for _, idx := range dynamicIndices {
+		if m.cols[idx].Width < m.cols[idx].MinWidth {
+			m.cols[idx].Width = m.cols[idx].MinWidth
+			changed = true
+		}
+	}
+
+	return changed
+}
+
 func (m *Model) newRenderContext() RenderContext {
 	return RenderContext{
 		Cursor:    m.cursor,
@@ -590,6 +716,9 @@ func (m *Model) newRenderContext() RenderContext {
 	}
 }
 
-func clamp(v, low, high int) int {
-	return min(max(v, low), high)
+func clamp[T cmp.Ordered](v, low, high T) T {
+	if low > high {
+		low, high = high, low
+	}
+	return min(high, max(low, v))
 }
