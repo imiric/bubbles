@@ -24,6 +24,7 @@ type Model struct {
 	mode      Mode
 	cursor    [2]int // [row, col]
 	focused   bool
+	sizeFunc  SizeFunc
 	styles    Styles
 	styleFunc StyleFunc
 	propWidth float64
@@ -51,7 +52,11 @@ type Row []string
 type Column struct {
 	Title    string
 	Width    int // fixed width
-	MinWidth int // dynamic width that must not be below this value
+	MinWidth int // deprecated
+	// Minimum and maximum width for dynamic sizing. A value of 0 indicates no
+	// limit, and content will be resized to fit the available width.
+	// This is overridden if the fixed Width is provided.
+	DynamicWidth [2]int
 }
 
 // KeyMap defines keybindings. It satisfies to the help.KeyMap interface, which
@@ -83,6 +88,9 @@ func (km KeyMap) FullHelp() [][]key.Binding {
 		{km.GotoTop, km.GotoBottom, km.SetNormalMode},
 	}
 }
+
+// SizeFunc is the function that defines the dynamic width of columns.
+type SizeFunc func(colIdx int, availableWidth int) int
 
 // StyleFunc is a function that can be used to customize the style of a table
 // cell based on the current render context.
@@ -227,19 +235,16 @@ func WithWidth(w int) Option {
 	}
 }
 
-// WithProportionalWidth sets the width of the table as a proportion of the
-// window width. This is used for dynamic table width calculations. p should be
-// between 0 and 1.
-func WithProportionalWidth(p float64) Option {
-	return func(m *Model) {
-		m.propWidth = clamp(p, 0, 1)
-	}
-}
-
 // WithFocused sets the focus state of the table.
 func WithFocused(f bool) Option {
 	return func(m *Model) {
 		m.focused = f
+	}
+}
+
+func WithSizeFunc(sf SizeFunc) Option {
+	return func(m *Model) {
+		m.sizeFunc = sf
 	}
 }
 
@@ -270,9 +275,8 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	// Process some messages regardless of focus.
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
-		if m.adjustColumnWidths(msg.Width) {
-			m.UpdateViewport()
-		}
+		m.adjustColumnWidths2(msg.Width)
+		return m, nil
 	default:
 		if !m.focused {
 			return m, nil
@@ -600,6 +604,77 @@ func (m *Model) renderRow(r int) string {
 	}
 
 	return row
+}
+
+func (m *Model) adjustColumnWidths2(windowWidth int) (changed bool) {
+	var (
+		dynamicIndices []int
+		fixedColWidth  int
+	)
+	for i, col := range m.cols {
+		if col.Width > 0 {
+			fixedColWidth += col.Width
+			continue
+		}
+		dynamicIndices = append(dynamicIndices, i)
+	}
+	if len(dynamicIndices) == 0 {
+		return false
+	}
+
+	// Step 1: Set initial widths for dynamic columns based on content
+	// for _, idx := range dynamicIndices {
+	// 	col := &m.cols[idx]
+	// 	maxContentWidth := runewidth.StringWidth(col.Title)
+	// 	for _, row := range m.rows {
+	// 		if idx < len(row) {
+	// 			maxContentWidth = max(maxContentWidth, runewidth.StringWidth(row[idx]))
+	// 		}
+	// 	}
+	// 	newWidth := maxContentWidth
+	// 	if col.DynamicWidth[0] > 0 {
+	// 		newWidth = max(col.DynamicWidth[0], newWidth)
+	// 	}
+	// 	if col.DynamicWidth[1] > 0 {
+	// 		newWidth = min(col.DynamicWidth[1], newWidth)
+	// 	}
+	// 	if col.Width != newWidth {
+	// 		col.Width = newWidth
+	// 		changed = true
+	// 	}
+	// }
+
+	// Step 3: Compute available dynamic width including styles
+	cellStyleWidth := m.styles.Cell.GetHorizontalFrameSize()
+	vpStyleWidth := m.viewport.Style.GetHorizontalFrameSize()
+	// The -2 is needed for correct adjustments, but I'm not sure where the extra
+	// width comes from.
+	availableDynamicWidth := windowWidth - fixedColWidth -
+		(len(m.cols) * cellStyleWidth) - vpStyleWidth - 2
+
+	if m.sizeFunc != nil {
+		for _, idx := range dynamicIndices {
+			col := &m.cols[idx]
+			newWidth := m.sizeFunc(idx, availableDynamicWidth)
+			// fmt.Printf(">>> available width: %d, newWidth: %d\n", availableDynamicWidth, newWidth)
+			if col.Width != newWidth {
+				col.Width = newWidth
+				changed = true
+			}
+		}
+	} else {
+		// Give each dynamic column the same width.
+		equalWidth := availableDynamicWidth / len(dynamicIndices)
+		for _, idx := range dynamicIndices {
+			col := &m.cols[idx]
+			if col.Width != equalWidth {
+				col.Width = equalWidth
+				changed = true
+			}
+		}
+	}
+
+	return changed
 }
 
 // Adjust column widths dynamically depending on the configured table
