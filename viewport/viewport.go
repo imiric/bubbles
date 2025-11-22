@@ -450,8 +450,16 @@ func ViewUp(m Model, lines []string) tea.Cmd {
 
 // Update handles standard message-based viewport updates.
 func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
-	if !m.focused {
+	// Process some messages regardless of focus.
+	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		m.Height = msg.Height
+		m.Width = msg.Width
 		return m, nil
+	default:
+		if !m.focused {
+			return m, nil
+		}
 	}
 
 	var cmd tea.Cmd
