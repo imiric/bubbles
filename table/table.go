@@ -623,10 +623,10 @@ func (m *Model) adjustColumnWidths(windowWidth int) (changed bool) {
 	// Step 1: Set initial widths for dynamic columns based on content/MinWidth
 	for _, idx := range dynamicIndices {
 		col := &m.cols[idx]
-		contentWidth := runewidth.StringWidth(col.Title)
+		contentWidth := ansi.StringWidth(col.Title)
 		for _, row := range m.rows {
 			if idx < len(row) {
-				contentWidth = max(contentWidth, runewidth.StringWidth(row[idx]))
+				contentWidth = max(contentWidth, ansi.StringWidth(row[idx]))
 			}
 		}
 		newWidth := max(col.MinWidth, contentWidth)
