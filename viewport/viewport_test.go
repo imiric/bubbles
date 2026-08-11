@@ -600,7 +600,7 @@ func TestSizing(t *testing.T) {
 		vt.Style = vt.Style.Border(lipgloss.RoundedBorder())
 		vt.SetContent(textContentList)
 
-		view := vt.View()
+		view := vt.View().Content
 		if w, h := lipgloss.Size(view); w != width || h != height {
 			t.Errorf("view size should be %d x %d, got %d x %d", width, height, w, h)
 		}
@@ -619,21 +619,21 @@ func TestSizing(t *testing.T) {
 		vt.Style = vt.Style.Border(lipgloss.RoundedBorder())
 		vt.SetContent(textContentList)
 
-		view := vt.View()
+		view := vt.View().Content
 		if w, h := lipgloss.Size(view); w != width || h != height {
 			t.Errorf("view size should be %d x %d, got %d x %d", width, height, w, h)
 		}
 
-		golden.RequireEqual(withSuffix(t, "at-top"), vt.View())
+		golden.RequireEqual(withSuffix(t, "at-top"), vt.View().Content)
 
 		vt.ScrollDown(1)
-		golden.RequireEqual(withSuffix(t, "scrolled-plus-1"), vt.View())
+		golden.RequireEqual(withSuffix(t, "scrolled-plus-1"), vt.View().Content)
 
 		vt.ScrollDown(1)
-		golden.RequireEqual(withSuffix(t, "scrolled-plus-2"), vt.View())
+		golden.RequireEqual(withSuffix(t, "scrolled-plus-2"), vt.View().Content)
 
 		vt.GotoBottom()
-		golden.RequireEqual(withSuffix(t, "at-bottom"), vt.View())
+		golden.RequireEqual(withSuffix(t, "at-bottom"), vt.View().Content)
 	})
 
 	t.Run("view-50x15-softwrap-gutter", func(t *testing.T) {
@@ -650,29 +650,29 @@ func TestSizing(t *testing.T) {
 		}
 		vt.SetContent(textContentList)
 
-		if w, h := lipgloss.Size(vt.View()); w != width || h != height {
+		if w, h := lipgloss.Size(vt.View().Content); w != width || h != height {
 			t.Errorf("view size should be %d x %d, got %d x %d", width, height, w, h)
 		}
 
-		golden.RequireEqual(withSuffix(t, "at-top"), vt.View())
-
-		vt.ScrollDown(1)
-		if w, h := lipgloss.Size(vt.View()); w != width || h != height {
-			t.Errorf("view size should be %d x %d, got %d x %d", width, height, w, h)
-		}
-		golden.RequireEqual(withSuffix(t, "scrolled-plus-1"), vt.View())
+		golden.RequireEqual(withSuffix(t, "at-top"), vt.View().Content)
 
 		vt.ScrollDown(1)
-		if w, h := lipgloss.Size(vt.View()); w != width || h != height {
+		if w, h := lipgloss.Size(vt.View().Content); w != width || h != height {
 			t.Errorf("view size should be %d x %d, got %d x %d", width, height, w, h)
 		}
-		golden.RequireEqual(withSuffix(t, "scrolled-plus-2"), vt.View())
+		golden.RequireEqual(withSuffix(t, "scrolled-plus-1"), vt.View().Content)
+
+		vt.ScrollDown(1)
+		if w, h := lipgloss.Size(vt.View().Content); w != width || h != height {
+			t.Errorf("view size should be %d x %d, got %d x %d", width, height, w, h)
+		}
+		golden.RequireEqual(withSuffix(t, "scrolled-plus-2"), vt.View().Content)
 
 		vt.GotoBottom()
-		if w, h := lipgloss.Size(vt.View()); w != width || h != height {
+		if w, h := lipgloss.Size(vt.View().Content); w != width || h != height {
 			t.Errorf("view size should be %d x %d, got %d x %d", width, height, w, h)
 		}
-		golden.RequireEqual(withSuffix(t, "at-bottom"), vt.View())
+		golden.RequireEqual(withSuffix(t, "at-bottom"), vt.View().Content)
 	})
 
 	t.Run("view-40x1-softwrap", func(t *testing.T) {
@@ -686,7 +686,7 @@ func TestSizing(t *testing.T) {
 		vt.Style = vt.Style.Border(lipgloss.RoundedBorder())
 		vt.SetContent(textContentList)
 
-		view := vt.View()
+		view := vt.View().Content
 		if w, h := lipgloss.Size(view); w != width || h != height {
 			t.Errorf("view size should be %d x %d, got %d x %d", width, height, w, h)
 		}
@@ -694,13 +694,13 @@ func TestSizing(t *testing.T) {
 		golden.RequireEqual(t, view)
 
 		vt.ScrollDown(1)
-		golden.RequireEqual(withSuffix(t, "scrolled-plus-1"), vt.View())
+		golden.RequireEqual(withSuffix(t, "scrolled-plus-1"), vt.View().Content)
 
 		vt.ScrollDown(1)
-		golden.RequireEqual(withSuffix(t, "scrolled-plus-2"), vt.View())
+		golden.RequireEqual(withSuffix(t, "scrolled-plus-2"), vt.View().Content)
 
 		vt.GotoBottom()
-		golden.RequireEqual(withSuffix(t, "at-bottom"), vt.View())
+		golden.RequireEqual(withSuffix(t, "at-bottom"), vt.View().Content)
 	})
 
 	t.Run("view-50x15-content-lines", func(t *testing.T) {
@@ -711,7 +711,7 @@ func TestSizing(t *testing.T) {
 		}
 		vt := New(WithWidth(50), WithHeight(15))
 		vt.SetContentLines(content)
-		golden.RequireEqual(t, vt.View())
+		golden.RequireEqual(t, vt.View().Content)
 	})
 
 	t.Run("view-0x0", func(t *testing.T) {

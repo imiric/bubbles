@@ -124,6 +124,8 @@ type Model struct {
 	hiIdx      int
 }
 
+var _ tea.Model = (*Model)(nil)
+
 // GutterFunc can be implemented and set into [Model.LeftGutterFunc].
 //
 // Example implementation showing line numbers:
@@ -704,7 +706,7 @@ func (m Model) findNearestMatch() int {
 }
 
 // Update handles standard message-based viewport updates.
-func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
+func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// Process some messages regardless of focus.
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
@@ -717,7 +719,7 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		}
 	}
 
-	m = m.updateAsModel(msg)
+	*m = m.updateAsModel(msg)
 	return m, nil
 }
 
@@ -790,7 +792,7 @@ func (m Model) updateAsModel(msg tea.Msg) Model {
 }
 
 // View renders the viewport into a string.
-func (m Model) View() string {
+func (m Model) View() tea.View {
 	w, h := m.Width(), m.Height()
 	if sw := m.Style.GetWidth(); sw != 0 {
 		w = min(w, sw)
@@ -800,18 +802,20 @@ func (m Model) View() string {
 	}
 
 	if w == 0 || h == 0 {
-		return ""
+		return tea.NewView("")
 	}
 
 	contentWidth := w - m.Style.GetHorizontalFrameSize()
 	contentHeight := h - m.Style.GetVerticalFrameSize()
-	contents := lipgloss.NewStyle().
+	contentsPadded := lipgloss.NewStyle().
 		Width(contentWidth).   // pad to width.
 		Height(contentHeight). // pad to height.
 		Render(strings.Join(m.visibleLines(), "\n"))
-	return m.Style.
+	contents := m.Style.
 		UnsetWidth().UnsetHeight(). // Style size already applied in contents.
-		Render(contents)
+		Render(contentsPadded)
+
+	return tea.NewView(contents)
 }
 
 func clamp[T cmp.Ordered](v, low, high T) T {

@@ -339,7 +339,7 @@ func (m *Model) Blur() {
 
 // View renders the component.
 func (m *Model) View() tea.View {
-	return tea.NewView(m.headersView() + "\n" + m.viewport.View())
+	return tea.NewView(m.headersView() + "\n" + m.viewport.View().Content)
 }
 
 // HelpView is a helper method for rendering the help menu from the keymap.
