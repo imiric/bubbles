@@ -325,7 +325,7 @@ func TestTableAlignment(t *testing.T) {
 				{"Hobnobs", "UK", "Yes"},
 			}),
 		)
-		got := ansiStrip(biscuits.View())
+		got := ansiStrip(biscuits.View().Content)
 		golden.RequireEqual(t, []byte(got))
 	})
 	t.Run("With border", func(t *testing.T) {
@@ -355,7 +355,7 @@ func TestTableAlignment(t *testing.T) {
 			}),
 			WithStyles(s),
 		)
-		got := ansiStrip(baseStyle.Render(biscuits.View()))
+		got := ansiStrip(baseStyle.Render(biscuits.View().Content))
 		golden.RequireEqual(t, []byte(got))
 	})
 }
@@ -905,7 +905,7 @@ func TestModel_View(t *testing.T) {
 
 			table := tc.modelFunc()
 
-			got := ansi.Strip(table.View())
+			got := ansi.Strip(table.View().Content)
 
 			golden.RequireEqual(t, []byte(got))
 		})
@@ -935,7 +935,7 @@ func TestModel_View_CenteredInABox(t *testing.T) {
 		}),
 	)
 
-	tableView := ansi.Strip(table.View())
+	tableView := ansi.Strip(table.View().Content)
 	got := boxStyle.Render(tableView)
 
 	golden.RequireEqual(t, []byte(got))

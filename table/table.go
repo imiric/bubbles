@@ -34,6 +34,8 @@ type Model struct {
 	end      int
 }
 
+var _ tea.Model = (*Model)(nil)
+
 // Mode represents different states the table could be in. This can affect
 // rendering and other behavior.
 type Mode int
@@ -270,8 +272,11 @@ func WithKeyMap(km KeyMap) Option {
 	}
 }
 
+// Init implements the [tea.Model] interface.
+func (_ *Model) Init() tea.Cmd { return nil }
+
 // Update is the Bubble Tea update loop.
-func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
+func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// Process some messages regardless of focus.
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
@@ -333,8 +338,8 @@ func (m *Model) Blur() {
 }
 
 // View renders the component.
-func (m Model) View() string {
-	return m.headersView() + "\n" + m.viewport.View()
+func (m *Model) View() tea.View {
+	return tea.NewView(m.headersView() + "\n" + m.viewport.View())
 }
 
 // HelpView is a helper method for rendering the help menu from the keymap.
