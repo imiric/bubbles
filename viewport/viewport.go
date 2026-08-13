@@ -818,6 +818,16 @@ func (m Model) View() tea.View {
 	return tea.NewView(contents)
 }
 
+// ShortHelp implements the KeyMap interface.
+func (m *Model) ShortHelp() []key.Binding {
+	return m.KeyMap.ShortHelp()
+}
+
+// FullHelp implements the KeyMap interface.
+func (m *Model) FullHelp() [][]key.Binding {
+	return m.KeyMap.FullHelp()
+}
+
 func clamp[T cmp.Ordered](v, low, high T) T {
 	if high < low {
 		low, high = high, low

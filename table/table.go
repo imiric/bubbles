@@ -342,6 +342,16 @@ func (m *Model) View() tea.View {
 	return tea.NewView(m.headersView() + "\n" + m.viewport.View().Content)
 }
 
+// ShortHelp implements the KeyMap interface.
+func (m *Model) ShortHelp() []key.Binding {
+	return m.KeyMap.ShortHelp()
+}
+
+// FullHelp implements the KeyMap interface.
+func (m *Model) FullHelp() [][]key.Binding {
+	return m.KeyMap.FullHelp()
+}
+
 // HelpView is a helper method for rendering the help menu from the keymap.
 // Note that this view is not rendered by default and you must call it
 // manually in your application, where applicable.
