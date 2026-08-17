@@ -19,15 +19,16 @@ type Model struct {
 	KeyMap KeyMap
 	Help   help.Model
 
-	cols      []Column
-	rows      []Row
-	mode      Mode
-	cursor    [2]int // [row, col]
-	focused   bool
-	sizeFunc  SizeFunc
-	styles    Styles
-	styleFunc StyleFunc
-	propWidth float64
+	cols        []Column
+	rows        []Row
+	mode        Mode
+	cursor      [2]int // [row, col]
+	fixedColumn int
+	focused     bool
+	sizeFunc    SizeFunc
+	styles      Styles
+	styleFunc   StyleFunc
+	propWidth   float64
 
 	viewport viewport.Model
 	start    int
@@ -45,6 +46,8 @@ const (
 	ModeNormal Mode = iota
 	// ModeCell is the cell selection mode.
 	ModeCell
+	// ModeFixedColumn is the row selection mode with a fixed selected column.
+	ModeFixedColumn
 )
 
 // Row represents one line in the table.
@@ -204,6 +207,10 @@ func New(opts ...Option) Model {
 		opt(&m)
 	}
 
+	if m.mode == ModeFixedColumn && len(m.cols) > 0 {
+		m.cursor[1] = clamp(m.fixedColumn, 0, len(m.cols)-1)
+	}
+
 	m.UpdateViewport()
 
 	return m
@@ -262,6 +269,20 @@ func WithStyles(s Styles) Option {
 func WithStyleFunc(f StyleFunc) Option {
 	return func(m *Model) {
 		m.styleFunc = f
+	}
+}
+
+// WithMode sets the initial table mode.
+func WithMode(md Mode) Option {
+	return func(m *Model) {
+		m.mode = md
+	}
+}
+
+// WithFixedColumn sets the column used by ModeFixedColumn.
+func WithFixedColumn(col int) Option {
+	return func(m *Model) {
+		m.fixedColumn = col
 	}
 }
 
@@ -436,6 +457,9 @@ func (m *Model) SetRows(r []Row) {
 // SetColumns sets a new columns state.
 func (m *Model) SetColumns(c []Column) {
 	m.cols = c
+	if m.mode == ModeFixedColumn && len(m.cols) > 0 {
+		m.cursor[1] = clamp(m.fixedColumn, 0, len(m.cols)-1)
+	}
 	m.UpdateViewport()
 }
 
@@ -521,6 +545,9 @@ func (m *Model) MoveDown(n int) {
 // MoveLeft sets the table to cell selection mode and moves the selection left
 // by n number of columns. It can not go past the first column.
 func (m *Model) MoveLeft(n int) {
+	if m.mode == ModeFixedColumn {
+		return
+	}
 	m.mode = ModeCell
 	m.cursor[1] = clamp(m.cursor[1]-n, 0, len(m.cols)-1)
 	m.UpdateViewport()
@@ -529,6 +556,9 @@ func (m *Model) MoveLeft(n int) {
 // MoveRight sets the table to cell selection mode and moves the selection right
 // by n number of columns. It can not go past the last column.
 func (m *Model) MoveRight(n int) {
+	if m.mode == ModeFixedColumn {
+		return
+	}
 	m.mode = ModeCell
 	m.cursor[1] = clamp(m.cursor[1]+n, 0, len(m.cols)-1)
 	m.UpdateViewport()
@@ -547,8 +577,13 @@ func (m *Model) GotoBottom() {
 // SetMode sets the table mode.
 func (m *Model) SetMode(md Mode) {
 	m.mode = md
-	if md == ModeNormal {
+	switch md {
+	case ModeNormal:
 		m.cursor[1] = 0 // reset col
+	case ModeFixedColumn:
+		if len(m.cols) > 0 {
+			m.cursor[1] = clamp(m.fixedColumn, 0, len(m.cols)-1)
+		}
 	}
 	m.UpdateViewport()
 }
@@ -556,6 +591,24 @@ func (m *Model) SetMode(md Mode) {
 // Mode returns the current table mode.
 func (m Model) Mode() Mode {
 	return m.mode
+}
+
+// SetFixedColumn sets the column used by ModeFixedColumn.
+func (m *Model) SetFixedColumn(col int) {
+	if len(m.cols) == 0 {
+		m.fixedColumn = 0
+		return
+	}
+	m.fixedColumn = clamp(col, 0, len(m.cols)-1)
+	if m.mode == ModeFixedColumn {
+		m.cursor[1] = m.fixedColumn
+	}
+	m.UpdateViewport()
+}
+
+// FixedColumn returns the currently fixed column.
+func (m Model) FixedColumn() int {
+	return m.fixedColumn
 }
 
 // FromValues create the table rows from a simple string. It uses `\n` by
@@ -603,7 +656,7 @@ func (m *Model) renderRow(r int) string {
 			cellStyle = m.styleFunc(ctx)
 		}
 
-		if r == m.cursor[0] && c == m.cursor[1] && m.mode == ModeCell {
+		if r == m.cursor[0] && c == m.cursor[1] && (m.mode == ModeCell || m.mode == ModeFixedColumn) {
 			cellStyle = cellStyle.Inherit(m.styles.Selected)
 		}
 

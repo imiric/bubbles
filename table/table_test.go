@@ -553,6 +553,126 @@ func TestCursorNavigation(t *testing.T) {
 	}
 }
 
+func TestFixedColumn(t *testing.T) {
+	type wantS struct {
+		cursor      [2]int
+		mode        Mode
+		fixedColumn int
+	}
+	tests := map[string]struct {
+		opts   []Option
+		action func(*Model)
+		want   wantS
+	}{
+		"Default": {
+			opts: []Option{
+				WithColumns(testCols),
+				WithMode(ModeFixedColumn),
+				WithFixedColumn(1),
+			},
+			action: func(_ *Model) {},
+			want:   wantS{cursor: [2]int{0, 1}, mode: ModeFixedColumn, fixedColumn: 1},
+		},
+		"MoveRight": {
+			opts: []Option{
+				WithColumns(testCols),
+				WithMode(ModeFixedColumn),
+				WithFixedColumn(1),
+			},
+			action: func(t *Model) {
+				t.MoveRight(1)
+			},
+			want: wantS{cursor: [2]int{0, 1}, mode: ModeFixedColumn, fixedColumn: 1},
+		},
+		"MoveLeft": {
+			opts: []Option{
+				WithColumns(testCols),
+				WithMode(ModeFixedColumn),
+				WithFixedColumn(1),
+			},
+			action: func(t *Model) {
+				t.MoveLeft(1)
+			},
+			want: wantS{cursor: [2]int{0, 1}, mode: ModeFixedColumn, fixedColumn: 1},
+		},
+		"SetMode Normal": {
+			opts: []Option{
+				WithColumns(testCols),
+				WithMode(ModeFixedColumn),
+				WithFixedColumn(2),
+			},
+			action: func(t *Model) {
+				t.SetMode(ModeNormal)
+			},
+			want: wantS{cursor: [2]int{0, 0}, mode: ModeNormal, fixedColumn: 2},
+		},
+		"SetMode FixedColumn from cell": {
+			opts: []Option{
+				WithColumns(testCols),
+				WithRows([]Row{{"a", "b", "c"}}),
+			},
+			action: func(t *Model) {
+				t.SetCursor(0, 2)
+				t.SetMode(ModeFixedColumn)
+				t.SetFixedColumn(1)
+			},
+			want: wantS{cursor: [2]int{0, 1}, mode: ModeFixedColumn, fixedColumn: 1},
+		},
+		"SetFixedColumn clamps high": {
+			opts: []Option{
+				WithColumns(testCols),
+			},
+			action: func(t *Model) {
+				t.SetFixedColumn(10)
+			},
+			want: wantS{cursor: [2]int{0, 0}, mode: ModeNormal, fixedColumn: 2},
+		},
+		"SetFixedColumn clamps low": {
+			opts: []Option{
+				WithColumns(testCols),
+			},
+			action: func(t *Model) {
+				t.SetFixedColumn(-1)
+			},
+			want: wantS{cursor: [2]int{0, 0}, mode: ModeNormal, fixedColumn: 0},
+		},
+		"SetFixedColumn updates cursor": {
+			opts: []Option{
+				WithColumns(testCols),
+				WithMode(ModeFixedColumn),
+				WithFixedColumn(0),
+			},
+			action: func(t *Model) {
+				t.SetFixedColumn(2)
+			},
+			want: wantS{cursor: [2]int{0, 2}, mode: ModeFixedColumn, fixedColumn: 2},
+		},
+		"SetFixedColumn no columns": {
+			action: func(t *Model) {
+				t.SetFixedColumn(3)
+			},
+			want: wantS{cursor: [2]int{0, 0}, mode: ModeNormal, fixedColumn: 0},
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			table := New(tc.opts...)
+			tc.action(&table)
+
+			if table.Cursor() != tc.want.cursor {
+				t.Errorf("cursor: want %d, got %d", tc.want.cursor, table.Cursor())
+			}
+			if table.Mode() != tc.want.mode {
+				t.Errorf("mode: want %d, got %d", tc.want.mode, table.Mode())
+			}
+			if table.FixedColumn() != tc.want.fixedColumn {
+				t.Errorf("fixed column: want %d, got %d", tc.want.fixedColumn, table.FixedColumn())
+			}
+		})
+	}
+}
+
 func TestModel_SelectedCell(t *testing.T) {
 	table := New(WithColumns(testCols), WithRows([]Row{{"a1", "a2", "a3"}, {"b1", "b2", "b3"}}))
 	table.SetCursor(1, 1)
