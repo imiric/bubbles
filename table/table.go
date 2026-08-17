@@ -25,6 +25,7 @@ type Model struct {
 	cursor      [2]int // [row, col]
 	fixedColumn int
 	focused     bool
+	showHeader  bool
 	sizeFunc    SizeFunc
 	styles      Styles
 	styleFunc   StyleFunc
@@ -198,9 +199,10 @@ func New(opts ...Option) Model {
 	m := Model{
 		viewport: viewport.New(viewport.WithHeight(20)), //nolint:mnd
 
-		KeyMap: DefaultKeyMap(),
-		Help:   help.New(),
-		styles: DefaultStyles(),
+		KeyMap:     DefaultKeyMap(),
+		Help:       help.New(),
+		styles:     DefaultStyles(),
+		showHeader: true,
 	}
 
 	for _, opt := range opts {
@@ -233,7 +235,7 @@ func WithRows(rows []Row) Option {
 // WithHeight sets the height of the table.
 func WithHeight(h int) Option {
 	return func(m *Model) {
-		m.viewport.SetHeight(h - lipgloss.Height(m.headersView()))
+		m.viewport.SetHeight(h - m.headerHeight())
 	}
 }
 
@@ -283,6 +285,13 @@ func WithMode(md Mode) Option {
 func WithFixedColumn(col int) Option {
 	return func(m *Model) {
 		m.fixedColumn = col
+	}
+}
+
+// WithHeader controls whether the header row is rendered.
+func WithHeader(show bool) Option {
+	return func(m *Model) {
+		m.showHeader = show
 	}
 }
 
@@ -360,7 +369,11 @@ func (m *Model) Blur() {
 
 // View renders the component.
 func (m *Model) View() tea.View {
-	return tea.NewView(m.headersView() + "\n" + m.viewport.View().Content)
+	content := m.viewport.View().Content
+	if m.showHeader {
+		content = m.headersView() + "\n" + content
+	}
+	return tea.NewView(content)
 }
 
 // ShortHelp implements the KeyMap interface.
@@ -471,7 +484,7 @@ func (m *Model) SetWidth(w int) {
 
 // SetHeight sets the height of the viewport of the table.
 func (m *Model) SetHeight(h int) {
-	m.viewport.SetHeight(h - lipgloss.Height(m.headersView()))
+	m.viewport.SetHeight(h - m.headerHeight())
 	m.UpdateViewport()
 }
 
@@ -611,6 +624,18 @@ func (m Model) FixedColumn() int {
 	return m.fixedColumn
 }
 
+// SetHeader controls whether the header row is rendered.
+func (m *Model) SetHeader(show bool) {
+	if m.showHeader == show {
+		return
+	}
+	oldHeaderHeight := m.headerHeight()
+	m.showHeader = show
+	// Re-apply height so the viewport fills the intended space.
+	m.viewport.SetHeight(m.viewport.Height() + oldHeaderHeight - m.headerHeight())
+	m.UpdateViewport()
+}
+
 // FromValues create the table rows from a simple string. It uses `\n` by
 // default for getting all the rows and the given separator for the fields on
 // each row.
@@ -638,6 +663,14 @@ func (m Model) headersView() string {
 		s = append(s, m.styles.Header.Render(renderedCell))
 	}
 	return lipgloss.JoinHorizontal(lipgloss.Top, s...)
+}
+
+// headerHeight returns the rendered height of the header, or 0 when hidden.
+func (m Model) headerHeight() int {
+	if !m.showHeader {
+		return 0
+	}
+	return lipgloss.Height(m.headersView())
 }
 
 func (m *Model) renderRow(r int) string {

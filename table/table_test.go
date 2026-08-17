@@ -30,9 +30,10 @@ func TestNew(t *testing.T) {
 					viewport.WithWidth(0),
 					viewport.WithHeight(20),
 				),
-				KeyMap: DefaultKeyMap(),
-				Help:   help.New(),
-				styles: DefaultStyles(),
+				KeyMap:     DefaultKeyMap(),
+				Help:       help.New(),
+				styles:     DefaultStyles(),
+				showHeader: true,
 			},
 		},
 		"WithColumns": {
@@ -48,9 +49,10 @@ func TestNew(t *testing.T) {
 					viewport.WithWidth(0),
 					viewport.WithHeight(20),
 				),
-				KeyMap: DefaultKeyMap(),
-				Help:   help.New(),
-				styles: DefaultStyles(),
+				KeyMap:     DefaultKeyMap(),
+				Help:       help.New(),
+				styles:     DefaultStyles(),
+				showHeader: true,
 
 				// Modified fields
 				cols: []Column{
@@ -76,9 +78,10 @@ func TestNew(t *testing.T) {
 					viewport.WithWidth(0),
 					viewport.WithHeight(20),
 				),
-				KeyMap: DefaultKeyMap(),
-				Help:   help.New(),
-				styles: DefaultStyles(),
+				KeyMap:     DefaultKeyMap(),
+				Help:       help.New(),
+				styles:     DefaultStyles(),
+				showHeader: true,
 
 				// Modified fields
 				cols: []Column{
@@ -97,12 +100,12 @@ func TestNew(t *testing.T) {
 			},
 			want: Model{
 				// Default fields
-				KeyMap: DefaultKeyMap(),
-				Help:   help.New(),
-				styles: DefaultStyles(),
+				KeyMap:     DefaultKeyMap(),
+				Help:       help.New(),
+				styles:     DefaultStyles(),
+				showHeader: true,
 
 				// Modified fields
-				// Viewport height is 1 less than the provided height when no header is present since lipgloss.Height adds 1
 				viewport: viewport.New(
 					viewport.WithWidth(0),
 					viewport.WithHeight(9),
@@ -115,12 +118,12 @@ func TestNew(t *testing.T) {
 			},
 			want: Model{
 				// Default fields
-				KeyMap: DefaultKeyMap(),
-				Help:   help.New(),
-				styles: DefaultStyles(),
+				KeyMap:     DefaultKeyMap(),
+				Help:       help.New(),
+				styles:     DefaultStyles(),
+				showHeader: true,
 
 				// Modified fields
-				// Viewport height is 1 less than the provided height when no header is present since lipgloss.Height adds 1
 				viewport: viewport.New(
 					viewport.WithWidth(10),
 					viewport.WithHeight(20),
@@ -137,9 +140,10 @@ func TestNew(t *testing.T) {
 					viewport.WithWidth(0),
 					viewport.WithHeight(20),
 				),
-				KeyMap: DefaultKeyMap(),
-				Help:   help.New(),
-				styles: DefaultStyles(),
+				KeyMap:     DefaultKeyMap(),
+				Help:       help.New(),
+				styles:     DefaultStyles(),
+				showHeader: true,
 
 				// Modified fields
 				focused: true,
@@ -155,8 +159,9 @@ func TestNew(t *testing.T) {
 					viewport.WithWidth(0),
 					viewport.WithHeight(20),
 				),
-				KeyMap: DefaultKeyMap(),
-				Help:   help.New(),
+				KeyMap:     DefaultKeyMap(),
+				Help:       help.New(),
+				showHeader: true,
 
 				// Modified fields
 				styles: Styles{},
@@ -172,11 +177,28 @@ func TestNew(t *testing.T) {
 					viewport.WithWidth(0),
 					viewport.WithHeight(20),
 				),
-				Help:   help.New(),
-				styles: DefaultStyles(),
+				Help:       help.New(),
+				styles:     DefaultStyles(),
+				showHeader: true,
 
 				// Modified fields
 				KeyMap: KeyMap{},
+			},
+		},
+		"WithHeader": {
+			opts: []Option{
+				WithHeader(false),
+			},
+			want: Model{
+				// Default fields
+				viewport: viewport.New(
+					viewport.WithWidth(0),
+					viewport.WithHeight(20),
+				),
+				KeyMap:     DefaultKeyMap(),
+				Help:       help.New(),
+				styles:     DefaultStyles(),
+				showHeader: false,
 			},
 		},
 	}
@@ -781,6 +803,35 @@ func TestModel_SetColumns(t *testing.T) {
 	}
 }
 
+func TestModel_SetHeader(t *testing.T) {
+	table := New(
+		WithColumns(testCols),
+		WithRows([]Row{{"r1", "r2", "r3"}}),
+		WithHeight(10),
+	)
+
+	if !table.showHeader {
+		t.Fatal("want showHeader to be true by default")
+	}
+	initialHeight := table.viewport.Height()
+
+	table.SetHeader(false)
+	if table.showHeader {
+		t.Fatal("want showHeader to be false after SetHeader(false)")
+	}
+	if table.viewport.Height() != initialHeight+1 {
+		t.Fatalf("want viewport height %d after hiding header, got %d", initialHeight+1, table.viewport.Height())
+	}
+
+	table.SetHeader(true)
+	if !table.showHeader {
+		t.Fatal("want showHeader to be true after SetHeader(true)")
+	}
+	if table.viewport.Height() != initialHeight {
+		t.Fatalf("want viewport height %d after showing header, got %d", initialHeight, table.viewport.Height())
+	}
+}
+
 func TestModel_View(t *testing.T) {
 	tests := map[string]struct {
 		modelFunc func() Model
@@ -813,6 +864,25 @@ func TestModel_View(t *testing.T) {
 				return New(
 					WithWidth(59),
 					WithHeight(21),
+					WithColumns([]Column{
+						{Title: "Name", Width: 25},
+						{Title: "Country of Origin", Width: 16},
+						{Title: "Dunk-able", Width: 12},
+					}),
+					WithRows([]Row{
+						{"Chocolate Digestives", "UK", "Yes"},
+						{"Tim Tams", "Australia", "No"},
+						{"Hobnobs", "UK", "Yes"},
+					}),
+				)
+			},
+		},
+		"No header": {
+			modelFunc: func() Model {
+				return New(
+					WithWidth(59),
+					WithHeight(21),
+					WithHeader(false),
 					WithColumns([]Column{
 						{Title: "Name", Width: 25},
 						{Title: "Country of Origin", Width: 16},
