@@ -13,9 +13,18 @@ import (
 )
 
 var testCols = []Column{
-	{Title: "col1", Width: 10},
-	{Title: "col2", Width: 10},
-	{Title: "col3", Width: 10},
+	{Title: "col1", Sizing: Fixed(10)},
+	{Title: "col2", Sizing: Fixed(10)},
+	{Title: "col3", Sizing: Fixed(10)},
+}
+
+// unpaddedStyles removes the cell padding so that the layout budget equals the
+// table width, which keeps the expected column widths easy to reason about.
+func unpaddedStyles() Styles {
+	s := DefaultStyles()
+	s.Header = s.Header.Padding(0)
+	s.Cell = s.Cell.Padding(0)
+	return s
 }
 
 func TestNew(t *testing.T) {
@@ -39,8 +48,8 @@ func TestNew(t *testing.T) {
 		"WithColumns": {
 			opts: []Option{
 				WithColumns([]Column{
-					{Title: "Foo", Width: 1},
-					{Title: "Bar", Width: 2},
+					{Title: "Foo", Sizing: Fixed(1)},
+					{Title: "Bar", Sizing: Fixed(2)},
 				}),
 			},
 			want: Model{
@@ -56,16 +65,16 @@ func TestNew(t *testing.T) {
 
 				// Modified fields
 				cols: []Column{
-					{Title: "Foo", Width: 1},
-					{Title: "Bar", Width: 2},
+					{Title: "Foo", Sizing: Fixed(1)},
+					{Title: "Bar", Sizing: Fixed(2)},
 				},
 			},
 		},
 		"WithColumns; WithRows": {
 			opts: []Option{
 				WithColumns([]Column{
-					{Title: "Foo", Width: 1},
-					{Title: "Bar", Width: 2},
+					{Title: "Foo", Sizing: Fixed(1)},
+					{Title: "Bar", Sizing: Fixed(2)},
 				}),
 				WithRows([]Row{
 					{"1", "Foo"},
@@ -85,8 +94,8 @@ func TestNew(t *testing.T) {
 
 				// Modified fields
 				cols: []Column{
-					{Title: "Foo", Width: 1},
-					{Title: "Bar", Width: 2},
+					{Title: "Foo", Sizing: Fixed(1)},
+					{Title: "Bar", Sizing: Fixed(2)},
 				},
 				rows: []Row{
 					{"1", "Foo"},
@@ -205,6 +214,9 @@ func TestNew(t *testing.T) {
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
+			// New resolves the layout once all options have been applied, so
+			// the expected model has to do the same.
+			tc.want.layoutDirty = true
 			tc.want.UpdateViewport()
 
 			got := New(tc.opts...)
@@ -218,6 +230,428 @@ func TestNew(t *testing.T) {
 				t.Errorf("\n\nwant %v\n\ngot %v", tc.want, got)
 			}
 		})
+	}
+}
+
+func TestSizing_String(t *testing.T) {
+	tests := []struct {
+		sizing Sizing
+		want   string
+	}{
+		{Sizing{}, "Auto"},
+		{Auto(), "Auto"},
+		{Fixed(10), "Fixed(10)"},
+		{Fixed(-5), "Fixed(0)"},
+		{Percent(0.25), "Percent(0.25)"},
+		{Percent(1.5), "Percent(1.00)"},
+		{Percent(-0.5), "Percent(0.00)"},
+		{Flex(3), "Flex(3)"},
+		{Flex(0), "Flex(1)"},
+	}
+
+	for _, tc := range tests {
+		if got := tc.sizing.String(); got != tc.want {
+			t.Errorf("want %q, got %q", tc.want, got)
+		}
+	}
+}
+
+func TestModel_ColumnWidths(t *testing.T) {
+	tests := map[string]struct {
+		opts []Option
+		want []int
+	}{
+		"no columns": {
+			opts: []Option{WithWidth(100)},
+			want: []int{},
+		},
+		"fixed": {
+			opts: []Option{
+				WithWidth(100),
+				WithStyles(unpaddedStyles()),
+				WithColumns([]Column{
+					{Title: "a", Sizing: Fixed(10)},
+					{Title: "b", Sizing: Fixed(20)},
+				}),
+			},
+			want: []int{10, 20},
+		},
+		"fixed wider than the table": {
+			opts: []Option{
+				WithWidth(20),
+				WithStyles(unpaddedStyles()),
+				WithColumns([]Column{
+					{Title: "a", Sizing: Fixed(30)},
+					{Title: "b", Sizing: Fixed(10)},
+				}),
+			},
+			want: []int{15, 5},
+		},
+		"percent": {
+			opts: []Option{
+				WithWidth(100),
+				WithStyles(unpaddedStyles()),
+				WithColumns([]Column{
+					{Title: "a", Sizing: Percent(0.25)},
+					{Title: "b", Sizing: Percent(0.5)},
+				}),
+			},
+			want: []int{25, 50},
+		},
+		"percent is taken from the content width": {
+			opts: []Option{
+				WithWidth(22), // 22 - 2 cells of padding = 20
+				WithColumns([]Column{
+					{Title: "a", Sizing: Percent(0.5)},
+				}),
+			},
+			want: []int{10},
+		},
+		"percent oversubscribed": {
+			opts: []Option{
+				WithWidth(100),
+				WithStyles(unpaddedStyles()),
+				WithColumns([]Column{
+					{Title: "a", Sizing: Percent(0.8)},
+					{Title: "b", Sizing: Percent(0.8)},
+				}),
+			},
+			want: []int{50, 50},
+		},
+		"auto includes the header": {
+			opts: []Option{
+				WithWidth(100),
+				WithStyles(unpaddedStyles()),
+				WithColumns([]Column{{Title: "Identifier"}}),
+				WithRows([]Row{{"1"}, {"22"}}),
+			},
+			want: []int{10},
+		},
+		"auto without a header": {
+			opts: []Option{
+				WithWidth(100),
+				WithStyles(unpaddedStyles()),
+				WithHeader(false),
+				WithColumns([]Column{{Title: "Identifier"}}),
+				WithRows([]Row{{"1"}, {"22"}}),
+			},
+			want: []int{2},
+		},
+		"auto measures the widest cell": {
+			opts: []Option{
+				WithWidth(100),
+				WithStyles(unpaddedStyles()),
+				WithColumns([]Column{
+					{Title: "ID"},
+					{Title: "Name"},
+				}),
+				WithRows([]Row{
+					{"1", "Chocolate"},
+					{"22", "Tim Tams"},
+				}),
+			},
+			want: []int{2, 9},
+		},
+		"flex equal weights": {
+			opts: []Option{
+				WithWidth(100),
+				WithStyles(unpaddedStyles()),
+				WithColumns([]Column{
+					{Title: "a", Sizing: Flex(1)},
+					{Title: "b", Sizing: Flex(1)},
+				}),
+			},
+			want: []int{50, 50},
+		},
+		"flex weighted": {
+			opts: []Option{
+				WithWidth(100),
+				WithStyles(unpaddedStyles()),
+				WithColumns([]Column{
+					{Title: "a", Sizing: Flex(1)},
+					{Title: "b", Sizing: Flex(3)},
+				}),
+			},
+			want: []int{25, 75},
+		},
+		"flex remainder goes to the last column": {
+			opts: []Option{
+				WithWidth(100),
+				WithStyles(unpaddedStyles()),
+				WithColumns([]Column{
+					{Title: "a", Sizing: Flex(1)},
+					{Title: "b", Sizing: Flex(1)},
+					{Title: "c", Sizing: Flex(1)},
+				}),
+			},
+			want: []int{33, 33, 34},
+		},
+		"flex takes what fixed and auto leave": {
+			opts: []Option{
+				WithWidth(100),
+				WithStyles(unpaddedStyles()),
+				WithColumns([]Column{
+					{Title: "a", Sizing: Fixed(10)},
+					{Title: "ab"},
+					{Title: "c", Sizing: Flex(1)},
+				}),
+			},
+			want: []int{10, 2, 88},
+		},
+		"flex max width is redistributed": {
+			opts: []Option{
+				WithWidth(100),
+				WithStyles(unpaddedStyles()),
+				WithColumns([]Column{
+					{Title: "a", Sizing: Flex(1), MaxWidth: 20},
+					{Title: "b", Sizing: Flex(1)},
+				}),
+			},
+			want: []int{20, 80},
+		},
+		"flex min width is taken from the other flex columns": {
+			opts: []Option{
+				WithWidth(100),
+				WithStyles(unpaddedStyles()),
+				WithColumns([]Column{
+					{Title: "a", Sizing: Flex(1), MinWidth: 60},
+					{Title: "b", Sizing: Flex(1)},
+				}),
+			},
+			want: []int{60, 40},
+		},
+		"min width on auto": {
+			opts: []Option{
+				WithWidth(100),
+				WithStyles(unpaddedStyles()),
+				WithColumns([]Column{{Title: "ab", MinWidth: 15}}),
+			},
+			want: []int{15},
+		},
+		"max width beats min width": {
+			opts: []Option{
+				WithWidth(100),
+				WithStyles(unpaddedStyles()),
+				WithColumns([]Column{
+					{Title: "a", Sizing: Fixed(50), MinWidth: 30, MaxWidth: 10},
+				}),
+			},
+			want: []int{10},
+		},
+		"shrinking respects min width": {
+			opts: []Option{
+				WithWidth(100),
+				WithStyles(unpaddedStyles()),
+				WithColumns([]Column{
+					{Title: "a", Sizing: Fixed(80), MinWidth: 80},
+					{Title: "b", Sizing: Fixed(40)},
+				}),
+			},
+			want: []int{80, 20},
+		},
+		"zero width table": {
+			opts: []Option{
+				WithWidth(0),
+				WithStyles(unpaddedStyles()),
+				WithColumns([]Column{
+					{Title: "a", Sizing: Fixed(10)},
+					{Title: "b", Sizing: Fixed(10)},
+				}),
+			},
+			want: []int{0, 0},
+		},
+		"mixed sizing": {
+			opts: []Option{
+				WithWidth(100),
+				WithStyles(unpaddedStyles()),
+				WithColumns([]Column{
+					{Title: "a", Sizing: Fixed(10)},
+					{Title: "b", Sizing: Percent(0.2)},
+					{Title: "Name"},
+					{Title: "d", Sizing: Flex(1)},
+				}),
+				WithRows([]Row{
+					{"x", "y", "Chocolate Digestives", "z"},
+				}),
+			},
+			want: []int{10, 20, 20, 50},
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			table := New(tc.opts...)
+
+			got := table.ColumnWidths()
+			if !reflect.DeepEqual(got, tc.want) {
+				t.Errorf("\n\nwant %v\n\ngot %v", tc.want, got)
+			}
+		})
+	}
+}
+
+func TestModel_ColumnWidths_ReturnsCopy(t *testing.T) {
+	table := New(
+		WithWidth(50),
+		WithColumns([]Column{{Title: "a", Sizing: Fixed(10)}}),
+	)
+
+	widths := table.ColumnWidths()
+	widths[0] = 99
+
+	if got := table.ColumnWidths()[0]; got != 10 {
+		t.Fatalf("want 10, got %d", got)
+	}
+}
+
+func TestModel_ContentWidth(t *testing.T) {
+	tests := map[string]struct {
+		table Model
+		want  int
+	}{
+		"default padding": {
+			table: New(WithWidth(59), WithColumns(testCols)),
+			want:  53, // 59 - 3 columns of 2 cells of padding
+		},
+		"no padding": {
+			table: New(WithWidth(59), WithColumns(testCols), WithStyles(unpaddedStyles())),
+			want:  59,
+		},
+		"padding exceeds the width": {
+			table: New(WithWidth(2), WithColumns(testCols)),
+			want:  0,
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			if got := tc.table.ContentWidth(); got != tc.want {
+				t.Errorf("want %d, got %d", tc.want, got)
+			}
+		})
+	}
+}
+
+// TestModel_LayoutRecompute checks that the resolved widths are invalidated by
+// everything they depend on.
+func TestModel_LayoutRecompute(t *testing.T) {
+	t.Run("SetWidth", func(t *testing.T) {
+		table := New(
+			WithWidth(50),
+			WithStyles(unpaddedStyles()),
+			WithColumns([]Column{
+				{Title: "a", Sizing: Flex(1)},
+				{Title: "b", Sizing: Flex(1)},
+			}),
+		)
+		assertWidths(t, &table, []int{25, 25})
+
+		table.SetWidth(30)
+		assertWidths(t, &table, []int{15, 15})
+	})
+
+	t.Run("SetRows", func(t *testing.T) {
+		table := New(
+			WithWidth(100),
+			WithStyles(unpaddedStyles()),
+			WithHeader(false),
+			WithColumns([]Column{{Title: "a"}}),
+			WithRows([]Row{{"a"}}),
+		)
+		assertWidths(t, &table, []int{1})
+
+		table.SetRows([]Row{{"abcdef"}})
+		assertWidths(t, &table, []int{6})
+	})
+
+	t.Run("SetRow", func(t *testing.T) {
+		table := New(
+			WithWidth(100),
+			WithStyles(unpaddedStyles()),
+			WithHeader(false),
+			WithColumns([]Column{{Title: "a"}}),
+			WithRows([]Row{{"a"}, {"b"}}),
+		)
+		assertWidths(t, &table, []int{1})
+
+		if err := table.SetRow(1, Row{"abcdef"}); err != nil {
+			t.Fatalf("got unexpected error %q", err)
+		}
+		assertWidths(t, &table, []int{6})
+	})
+
+	t.Run("SetColumns", func(t *testing.T) {
+		table := New(
+			WithWidth(100),
+			WithStyles(unpaddedStyles()),
+			WithColumns([]Column{{Title: "a", Sizing: Fixed(10)}}),
+		)
+		assertWidths(t, &table, []int{10})
+
+		table.SetColumns([]Column{
+			{Title: "a", Sizing: Fixed(20)},
+			{Title: "b", Sizing: Fixed(5)},
+		})
+		assertWidths(t, &table, []int{20, 5})
+	})
+
+	t.Run("SetStyles", func(t *testing.T) {
+		table := New(
+			WithWidth(20),
+			WithStyles(unpaddedStyles()),
+			WithColumns([]Column{{Title: "a", Sizing: Percent(1)}}),
+		)
+		assertWidths(t, &table, []int{20})
+
+		table.SetStyles(DefaultStyles())
+		assertWidths(t, &table, []int{18})
+	})
+
+	t.Run("SetHeader", func(t *testing.T) {
+		table := New(
+			WithWidth(100),
+			WithStyles(unpaddedStyles()),
+			WithColumns([]Column{{Title: "Identifier"}}),
+			WithRows([]Row{{"a"}}),
+		)
+		assertWidths(t, &table, []int{10})
+
+		table.SetHeader(false)
+		assertWidths(t, &table, []int{1})
+	})
+}
+
+func assertWidths(t *testing.T, m *Model, want []int) {
+	t.Helper()
+	if got := m.ColumnWidths(); !reflect.DeepEqual(got, want) {
+		t.Fatalf("\n\nwant %v\n\ngot %v", want, got)
+	}
+}
+
+// TestModel_FlexFillsWidth checks that flex columns consume the space left
+// over by the other columns exactly, padding included.
+func TestModel_FlexFillsWidth(t *testing.T) {
+	const width = 60
+
+	table := New(
+		WithWidth(width),
+		WithColumns([]Column{
+			{Title: "A", Sizing: Flex(1)},
+			{Title: "B", Sizing: Flex(2)},
+			{Title: "C", Sizing: Fixed(10)},
+		}),
+		WithRows([]Row{{"a", "b", "c"}}),
+	)
+
+	if want, got := []int{14, 30, 10}, table.ColumnWidths(); !reflect.DeepEqual(got, want) {
+		t.Fatalf("\n\nwant %v\n\ngot %v", want, got)
+	}
+
+	if got := ansi.StringWidth(ansiStrip(table.headersView())); got != width {
+		t.Errorf("header width: want %d, got %d", width, got)
+	}
+	if got := ansi.StringWidth(ansiStrip(table.renderRow(0))); got != width {
+		t.Errorf("row width: want %d, got %d", width, got)
 	}
 }
 
@@ -267,35 +701,39 @@ func TestModel_RenderRow(t *testing.T) {
 		{
 			name: "simple row",
 			table: &Model{
-				rows:   []Row{{"Foooooo", "Baaaaar", "Baaaaaz"}},
-				cols:   testCols,
-				styles: Styles{Cell: lipgloss.NewStyle()},
+				rows:     []Row{{"Foooooo", "Baaaaar", "Baaaaaz"}},
+				cols:     testCols,
+				styles:   Styles{Cell: lipgloss.NewStyle()},
+				viewport: viewport.New(viewport.WithWidth(30)),
 			},
 			expected: "Foooooo   Baaaaar   Baaaaaz   ",
 		},
 		{
 			name: "simple row with truncations",
 			table: &Model{
-				rows:   []Row{{"Foooooooooo", "Baaaaaaaaar", "Quuuuuuuuux"}},
-				cols:   testCols,
-				styles: Styles{Cell: lipgloss.NewStyle()},
+				rows:     []Row{{"Foooooooooo", "Baaaaaaaaar", "Quuuuuuuuux"}},
+				cols:     testCols,
+				styles:   Styles{Cell: lipgloss.NewStyle()},
+				viewport: viewport.New(viewport.WithWidth(30)),
 			},
 			expected: "Foooooooo…Baaaaaaaa…Quuuuuuuu…",
 		},
 		{
 			name: "simple row avoiding truncations",
 			table: &Model{
-				rows:   []Row{{"Fooooooooo", "Baaaaaaaar", "Quuuuuuuux"}},
-				cols:   testCols,
-				styles: Styles{Cell: lipgloss.NewStyle()},
+				rows:     []Row{{"Fooooooooo", "Baaaaaaaar", "Quuuuuuuux"}},
+				cols:     testCols,
+				styles:   Styles{Cell: lipgloss.NewStyle()},
+				viewport: viewport.New(viewport.WithWidth(30)),
 			},
 			expected: "FoooooooooBaaaaaaaarQuuuuuuuux",
 		},
 		{
 			name: "simple row with style func",
 			table: &Model{
-				rows: []Row{{"Foooooo", "Baaaaar", "Baaaaaz"}},
-				cols: testCols,
+				rows:     []Row{{"Foooooo", "Baaaaar", "Baaaaaz"}},
+				cols:     testCols,
+				viewport: viewport.New(viewport.WithWidth(30)),
 				styleFunc: func(ctx RenderContext) lipgloss.Style {
 					if strings.HasSuffix(ctx.Value, "z") {
 						return lipgloss.NewStyle().Transform(strings.ToLower)
@@ -305,9 +743,38 @@ func TestModel_RenderRow(t *testing.T) {
 			},
 			expected: "FOOOOOO   BAAAAAR   baaaaaz   ",
 		},
+		{
+			name: "auto sized columns",
+			table: &Model{
+				rows: []Row{{"Foo", "Baaaaar"}},
+				cols: []Column{
+					{Title: "col1"},
+					{Title: "col2"},
+				},
+				styles:     Styles{Cell: lipgloss.NewStyle()},
+				showHeader: true,
+				viewport:   viewport.New(viewport.WithWidth(30)),
+			},
+			expected: "Foo Baaaaar",
+		},
+		{
+			name: "flex sized columns",
+			table: &Model{
+				rows: []Row{{"Foo", "Bar"}},
+				cols: []Column{
+					{Title: "col1", Sizing: Flex(1)},
+					{Title: "col2", Sizing: Flex(1)},
+				},
+				styles:   Styles{Cell: lipgloss.NewStyle()},
+				viewport: viewport.New(viewport.WithWidth(20)),
+			},
+			expected: "Foo       Bar       ",
+		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			tc.table.ensureLayout()
+
 			row := tc.table.renderRow(0)
 			if row != tc.expected {
 				t.Fatalf("\n\nWant: \n%s\n\nGot:  \n%s\n", tc.expected, row)
@@ -316,13 +783,24 @@ func TestModel_RenderRow(t *testing.T) {
 	}
 }
 
+func TestModel_RenderRow_ZeroWidthColumns(t *testing.T) {
+	// There's no room for any column, so nothing is rendered.
+	table := New(WithWidth(0), WithColumns(testCols), WithRows([]Row{{"a", "b", "c"}}))
+
+	if got := ansiStrip(table.renderRow(0)); got != "" {
+		t.Fatalf("want an empty row, got %q", got)
+	}
+}
+
 func TestModel_RenderRow_AnsiWidth(t *testing.T) {
 	value := "\x1b[31mABCDEFGH\x1b[0m"
 	table := &Model{
-		rows:   []Row{{value}},
-		cols:   []Column{{Title: "col1", Width: 8}},
-		styles: Styles{Cell: lipgloss.NewStyle()},
+		rows:     []Row{{value}},
+		cols:     []Column{{Title: "col1", Sizing: Fixed(8)}},
+		styles:   Styles{Cell: lipgloss.NewStyle()},
+		viewport: viewport.New(viewport.WithWidth(8)),
 	}
+	table.ensureLayout()
 
 	got := ansi.Strip(table.renderRow(0))
 	want := "ABCDEFGH"
@@ -337,9 +815,9 @@ func TestTableAlignment(t *testing.T) {
 			WithWidth(59),
 			WithHeight(5),
 			WithColumns([]Column{
-				{Title: "Name", Width: 25},
-				{Title: "Country of Origin", Width: 16},
-				{Title: "Dunk-able", Width: 12},
+				{Title: "Name", Sizing: Fixed(25)},
+				{Title: "Country of Origin", Sizing: Fixed(16)},
+				{Title: "Dunk-able", Sizing: Fixed(12)},
 			}),
 			WithRows([]Row{
 				{"Chocolate Digestives", "UK", "Yes"},
@@ -366,9 +844,9 @@ func TestTableAlignment(t *testing.T) {
 			WithWidth(59),
 			WithHeight(5),
 			WithColumns([]Column{
-				{Title: "Name", Width: 25},
-				{Title: "Country of Origin", Width: 16},
-				{Title: "Dunk-able", Width: 12},
+				{Title: "Name", Sizing: Fixed(25)},
+				{Title: "Country of Origin", Sizing: Fixed(16)},
+				{Title: "Dunk-able", Sizing: Fixed(12)},
 			}),
 			WithRows([]Row{
 				{"Chocolate Digestives", "UK", "Yes"},
@@ -805,6 +1283,7 @@ func TestModel_SetColumns(t *testing.T) {
 
 func TestModel_SetHeader(t *testing.T) {
 	table := New(
+		WithWidth(36),
 		WithColumns(testCols),
 		WithRows([]Row{{"r1", "r2", "r3"}}),
 		WithHeight(10),
@@ -851,7 +1330,7 @@ func TestModel_View(t *testing.T) {
 					WithWidth(27),
 					WithHeight(21),
 					WithColumns([]Column{
-						{Title: "Name", Width: 25},
+						{Title: "Name", Sizing: Fixed(25)},
 					}),
 					WithRows([]Row{
 						{"Chocolate Digestives"},
@@ -865,9 +1344,45 @@ func TestModel_View(t *testing.T) {
 					WithWidth(59),
 					WithHeight(21),
 					WithColumns([]Column{
-						{Title: "Name", Width: 25},
-						{Title: "Country of Origin", Width: 16},
-						{Title: "Dunk-able", Width: 12},
+						{Title: "Name", Sizing: Fixed(25)},
+						{Title: "Country of Origin", Sizing: Fixed(16)},
+						{Title: "Dunk-able", Sizing: Fixed(12)},
+					}),
+					WithRows([]Row{
+						{"Chocolate Digestives", "UK", "Yes"},
+						{"Tim Tams", "Australia", "No"},
+						{"Hobnobs", "UK", "Yes"},
+					}),
+				)
+			},
+		},
+		"Auto columns": {
+			modelFunc: func() Model {
+				return New(
+					WithWidth(60),
+					WithHeight(10),
+					WithColumns([]Column{
+						{Title: "Name"},
+						{Title: "Country of Origin"},
+						{Title: "Dunk-able"},
+					}),
+					WithRows([]Row{
+						{"Chocolate Digestives", "UK", "Yes"},
+						{"Tim Tams", "Australia", "No"},
+						{"Hobnobs", "UK", "Yes"},
+					}),
+				)
+			},
+		},
+		"Flex and percent columns": {
+			modelFunc: func() Model {
+				return New(
+					WithWidth(60),
+					WithHeight(10),
+					WithColumns([]Column{
+						{Title: "Name", Sizing: Flex(2)},
+						{Title: "Country of Origin", Sizing: Flex(1), MinWidth: 12},
+						{Title: "Dunk-able", Sizing: Percent(0.2)},
 					}),
 					WithRows([]Row{
 						{"Chocolate Digestives", "UK", "Yes"},
@@ -884,9 +1399,9 @@ func TestModel_View(t *testing.T) {
 					WithHeight(21),
 					WithHeader(false),
 					WithColumns([]Column{
-						{Title: "Name", Width: 25},
-						{Title: "Country of Origin", Width: 16},
-						{Title: "Dunk-able", Width: 12},
+						{Title: "Name", Sizing: Fixed(25)},
+						{Title: "Country of Origin", Sizing: Fixed(16)},
+						{Title: "Dunk-able", Sizing: Fixed(12)},
 					}),
 					WithRows([]Row{
 						{"Chocolate Digestives", "UK", "Yes"},
@@ -907,9 +1422,9 @@ func TestModel_View(t *testing.T) {
 					WithWidth(60),
 					WithHeight(10),
 					WithColumns([]Column{
-						{Title: "Name", Width: 25},
-						{Title: "Country of Origin", Width: 16},
-						{Title: "Dunk-able", Width: 12},
+						{Title: "Name", Sizing: Fixed(25)},
+						{Title: "Country of Origin", Sizing: Fixed(16)},
+						{Title: "Dunk-able", Sizing: Fixed(12)},
 					}),
 					WithRows([]Row{
 						{"Chocolate Digestives", "UK", "Yes"},
@@ -930,9 +1445,9 @@ func TestModel_View(t *testing.T) {
 					WithWidth(53),
 					WithHeight(10),
 					WithColumns([]Column{
-						{Title: "Name", Width: 25},
-						{Title: "Country of Origin", Width: 16},
-						{Title: "Dunk-able", Width: 12},
+						{Title: "Name", Sizing: Fixed(25)},
+						{Title: "Country of Origin", Sizing: Fixed(16)},
+						{Title: "Dunk-able", Sizing: Fixed(12)},
 					}),
 					WithRows([]Row{
 						{"Chocolate Digestives", "UK", "Yes"},
@@ -950,9 +1465,9 @@ func TestModel_View(t *testing.T) {
 					WithWidth(59),
 					WithHeight(23),
 					WithColumns([]Column{
-						{Title: "Name", Width: 25},
-						{Title: "Country of Origin", Width: 16},
-						{Title: "Dunk-able", Width: 12},
+						{Title: "Name", Sizing: Fixed(25)},
+						{Title: "Country of Origin", Sizing: Fixed(16)},
+						{Title: "Dunk-able", Sizing: Fixed(12)},
 					}),
 					WithRows([]Row{
 						{"Chocolate Digestives", "UK", "Yes"},
@@ -972,9 +1487,9 @@ func TestModel_View(t *testing.T) {
 					WithWidth(59),
 					WithHeight(21),
 					WithColumns([]Column{
-						{Title: "Name", Width: 25},
-						{Title: "Country of Origin", Width: 16},
-						{Title: "Dunk-able", Width: 12},
+						{Title: "Name", Sizing: Fixed(25)},
+						{Title: "Country of Origin", Sizing: Fixed(16)},
+						{Title: "Dunk-able", Sizing: Fixed(12)},
 					}),
 					WithRows([]Row{
 						{"Chocolate Digestives", "UK", "Yes"},
@@ -993,9 +1508,9 @@ func TestModel_View(t *testing.T) {
 					WithWidth(59),
 					WithHeight(6),
 					WithColumns([]Column{
-						{Title: "Name", Width: 25},
-						{Title: "Country of Origin", Width: 16},
-						{Title: "Dunk-able", Width: 12},
+						{Title: "Name", Sizing: Fixed(25)},
+						{Title: "Country of Origin", Sizing: Fixed(16)},
+						{Title: "Dunk-able", Sizing: Fixed(12)},
 					}),
 					WithRows([]Row{
 						{"Chocolate Digestives", "UK", "Yes"},
@@ -1011,9 +1526,9 @@ func TestModel_View(t *testing.T) {
 					WithWidth(59),
 					WithHeight(2),
 					WithColumns([]Column{
-						{Title: "Name", Width: 25},
-						{Title: "Country of Origin", Width: 16},
-						{Title: "Dunk-able", Width: 12},
+						{Title: "Name", Sizing: Fixed(25)},
+						{Title: "Country of Origin", Sizing: Fixed(16)},
+						{Title: "Dunk-able", Sizing: Fixed(12)},
 					}),
 					WithRows([]Row{
 						{"Chocolate Digestives", "UK", "Yes"},
@@ -1030,9 +1545,9 @@ func TestModel_View(t *testing.T) {
 					WithWidth(80),
 					WithHeight(21),
 					WithColumns([]Column{
-						{Title: "Name", Width: 25},
-						{Title: "Country of Origin", Width: 16},
-						{Title: "Dunk-able", Width: 12},
+						{Title: "Name", Sizing: Fixed(25)},
+						{Title: "Country of Origin", Sizing: Fixed(16)},
+						{Title: "Dunk-able", Sizing: Fixed(12)},
 					}),
 					WithRows([]Row{
 						{"Chocolate Digestives", "UK", "Yes"},
@@ -1042,17 +1557,17 @@ func TestModel_View(t *testing.T) {
 				)
 			},
 		},
-		// TODO(fix): Setting the table width does not affect the total headers' width. Cells are wrapped.
-		// 	Headers are not affected. Truncation/resizing should match lipgloss.table functionality.
+		// The fixed widths oversubscribe the table, so every column is shrunk
+		// in proportion to the space it asked for.
 		"Width less than columns": {
 			modelFunc: func() Model {
 				return New(
 					WithWidth(30),
 					WithHeight(15),
 					WithColumns([]Column{
-						{Title: "Name", Width: 25},
-						{Title: "Country of Origin", Width: 16},
-						{Title: "Dunk-able", Width: 12},
+						{Title: "Name", Sizing: Fixed(25)},
+						{Title: "Country of Origin", Sizing: Fixed(16)},
+						{Title: "Dunk-able", Sizing: Fixed(12)},
 					}),
 					WithRows([]Row{
 						{"Chocolate Digestives", "UK", "Yes"},
@@ -1061,7 +1576,24 @@ func TestModel_View(t *testing.T) {
 					}),
 				)
 			},
-			skip: true,
+		},
+		"Width less than columns with min widths": {
+			modelFunc: func() Model {
+				return New(
+					WithWidth(30),
+					WithHeight(15),
+					WithColumns([]Column{
+						{Title: "Name", Sizing: Fixed(25), MinWidth: 15},
+						{Title: "Country of Origin", Sizing: Fixed(16)},
+						{Title: "Dunk-able", Sizing: Fixed(12)},
+					}),
+					WithRows([]Row{
+						{"Chocolate Digestives", "UK", "Yes"},
+						{"Tim Tams", "Australia", "No"},
+						{"Hobnobs", "UK", "Yes"},
+					}),
+				)
+			},
 		},
 		"Modified viewport height": {
 			modelFunc: func() Model {
@@ -1069,9 +1601,9 @@ func TestModel_View(t *testing.T) {
 					WithWidth(59),
 					WithHeight(15),
 					WithColumns([]Column{
-						{Title: "Name", Width: 25},
-						{Title: "Country of Origin", Width: 16},
-						{Title: "Dunk-able", Width: 12},
+						{Title: "Name", Sizing: Fixed(25)},
+						{Title: "Country of Origin", Sizing: Fixed(16)},
+						{Title: "Dunk-able", Sizing: Fixed(12)},
 					}),
 					WithRows([]Row{
 						{"Chocolate Digestives", "UK", "Yes"},
@@ -1114,9 +1646,9 @@ func TestModel_View_CenteredInABox(t *testing.T) {
 		WithHeight(6),
 		WithWidth(80),
 		WithColumns([]Column{
-			{Title: "Name", Width: 25},
-			{Title: "Country of Origin", Width: 16},
-			{Title: "Dunk-able", Width: 12},
+			{Title: "Name", Sizing: Fixed(25)},
+			{Title: "Country of Origin", Sizing: Fixed(16)},
+			{Title: "Dunk-able", Sizing: Fixed(12)},
 		}),
 		WithRows([]Row{
 			{"Chocolate Digestives", "UK", "Yes"},
